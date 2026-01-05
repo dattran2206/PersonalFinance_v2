@@ -2,36 +2,43 @@ import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import Dashboard from './pages/Dashboard';
-import Login from './pages/Login';
-import Wallets from './pages/Wallets';
+import Index from './pages/Index';
 import Transactions from './pages/Transactions';
-import Budgets from './pages/Budgets';
-import Goals from './pages/Goals';
+import Categories from './pages/Categories';
+import Accounts from './pages/Accounts';
+import Budget from './pages/Budget';
+import Funds from './pages/Funds';
+import Investments from './pages/Investments';
 import Debts from './pages/Debts';
+import Reports from './pages/Reports';
+import Predictions from './pages/Predictions';
+import Transfer from './pages/Transfer';
 import NotFound from './pages/NotFound';
 
 const queryClient = new QueryClient();
 
 const App = () => (
-    <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-            <Toaster />
-            <BrowserRouter>
-                <Routes>
-                    <Route path="/" element={<Login />} />
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/wallets" element={<Wallets />} />
-                    <Route path="/transactions" element={<Transactions />} />
-                    <Route path="/budgets" element={<Budgets />} />
-                    <Route path="/goals" element={<Goals />} />
-                    <Route path="/debts" element={<Debts />} />
-                    <Route path="/reports" element={<Dashboard />} />
-                    <Route path="*" element={<NotFound />} />
-                </Routes>
-            </BrowserRouter>
-        </TooltipProvider>
-    </QueryClientProvider>
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/transactions" element={<Transactions />} />
+          <Route path="/categories" element={<Categories />} />
+          <Route path="/accounts" element={<Accounts />} />
+          <Route path="/budget" element={<Budget />} />
+          <Route path="/funds" element={<Funds />} />
+          <Route path="/investments" element={<Investments />} />
+          <Route path="/debts" element={<Debts />} />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="/predictions" element={<Predictions />} />
+          <Route path="/transfer" element={<Transfer />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
 );
 
 export default App;
