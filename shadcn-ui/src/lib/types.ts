@@ -1,6 +1,7 @@
 export enum TransactionType {
   INCOME = 'income',
   EXPENSE = 'expense',
+  TRANSFER = 'transfer',
 }
 
 export enum AccountType {
@@ -28,66 +29,84 @@ export enum DebtType {
   LOAN = 'loan',
 }
 
-export interface Category {
+export enum RecurrenceType {
+  NONE = 'none',
+  DAILY = 'daily',
+  WEEKLY = 'weekly',
+  MONTHLY = 'monthly',
+  YEARLY = 'yearly',
+}
+
+export interface BaseEntity {
   id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Category extends BaseEntity {
   name: string;
   type: CategoryType;
   icon: string;
   color: string;
+  parentId?: string | null;
 }
 
-export interface Account {
-  id: string;
+export interface Account extends BaseEntity {
   name: string;
   type: AccountType;
   balance: number;
   currency: string;
   icon: string;
   color: string;
+  creditLimit?: number;
+  dueDate?: string;
 }
 
-export interface Transaction {
-  id: string;
+export interface Transaction extends BaseEntity {
   date: string;
   amount: number;
   type: TransactionType;
-  categoryId: string;
+  categoryId?: string;
   accountId: string;
-  description: string;
+  toAccountId?: string;
+  fee?: number;
+  description?: string;
   note?: string;
+  recurrence?: RecurrenceType;
 }
 
-export interface Budget {
-  id: string;
+export interface Budget extends BaseEntity {
   categoryId: string;
   amount: number;
   period: 'monthly' | 'yearly';
   startDate: string;
+  endDate?: string;
+  rollover?: boolean;
 }
 
-export interface Fund {
-  id: string;
+export interface Fund extends BaseEntity {
   name: string;
   targetAmount: number;
   currentAmount: number;
-  description: string;
+  description?: string;
   icon: string;
   color: string;
+  deadline?: string | null;
 }
 
-export interface Investment {
-  id: string;
+export interface Investment extends BaseEntity {
   name: string;
   type: InvestmentType;
   purchasePrice: number;
   currentPrice: number;
   quantity: number;
   purchaseDate: string;
+  sellDate?: string;
+  profit?: number;
   description?: string;
 }
 
-export interface Debt {
-  id: string;
+export interface Debt extends BaseEntity {
   name: string;
   type: DebtType;
   amount: number;
@@ -95,6 +114,7 @@ export interface Debt {
   interestRate: number;
   startDate: string;
   dueDate: string;
+  monthlyPayment?: number | null;
   description?: string;
 }
 
