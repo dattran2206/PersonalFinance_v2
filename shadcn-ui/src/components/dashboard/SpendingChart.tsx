@@ -8,6 +8,8 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  Area,
+  AreaChart,
 } from 'recharts';
 import { MonthlyStats } from '@/lib/types';
 import { formatCurrency } from '@/lib/calculations';
@@ -18,46 +20,67 @@ interface SpendingChartProps {
 
 export default function SpendingChart({ data }: SpendingChartProps) {
   return (
-    <Card className="col-span-2">
+    <Card className="col-span-1 lg:col-span-2 shadow-sm border-none bg-white/50 dark:bg-white/5">
       <CardHeader>
-        <CardTitle>Xu hướng thu chi 6 tháng gần đây</CardTitle>
+        <CardTitle>Xu hướng thu chi</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="month" stroke="#6B7280" />
-            <YAxis stroke="#6B7280" tickFormatter={(value) => `${(value / 1000000).toFixed(0)}M`} />
+        <ResponsiveContainer width="100%" height={320}>
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+            <XAxis
+              dataKey="month"
+              stroke="hsl(var(--muted-foreground))"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              stroke="hsl(var(--muted-foreground))"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(value) => `${(value / 1000000).toFixed(0)}M`}
+            />
             <Tooltip
               formatter={(value: number) => formatCurrency(value)}
-              contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+              contentStyle={{
+                borderRadius: '12px',
+                border: 'none',
+                backgroundColor: 'hsl(var(--popover))',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}
             />
             <Legend />
-            <Line
+            <Area
               type="monotone"
               dataKey="income"
-              stroke="#10B981"
-              strokeWidth={2}
+              stroke="hsl(var(--primary))"
+              fillOpacity={1}
+              fill="url(#colorIncome)"
+              strokeWidth={3}
               name="Thu nhập"
-              dot={{ fill: '#10B981', r: 4 }}
             />
-            <Line
+            <Area
               type="monotone"
               dataKey="expense"
-              stroke="#EF4444"
-              strokeWidth={2}
+              stroke="hsl(var(--destructive))"
+              fillOpacity={1}
+              fill="url(#colorExpense)"
+              strokeWidth={3}
               name="Chi tiêu"
-              dot={{ fill: '#EF4444', r: 4 }}
             />
-            <Line
-              type="monotone"
-              dataKey="netIncome"
-              stroke="#3B82F6"
-              strokeWidth={2}
-              name="Thu nhập ròng"
-              dot={{ fill: '#3B82F6', r: 4 }}
-            />
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       </CardContent>
     </Card>

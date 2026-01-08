@@ -29,26 +29,28 @@ export const calculateNetIncome = (transactions: Transaction[]): number => {
 
 export const filterTransactionsByMonth = (transactions: Transaction[], year: number, month: number): Transaction[] => {
   return transactions.filter(t => {
-    const date = new Date(t.date);
-    return date.getFullYear() === year && date.getMonth() === month;
+    // Manual parsing to avoid timezone issues with new Date("YYYY-MM-DD") which defaults to UTC
+    const [y, m] = t.date.split('-').map(Number);
+    // Note: m is 1-indexed in date string, but we compare with 0-indexed month
+    return y === year && (m - 1) === month;
   });
 };
 
 export const filterTransactionsByYear = (transactions: Transaction[], year: number): Transaction[] => {
   return transactions.filter(t => {
-    const date = new Date(t.date);
-    return date.getFullYear() === year;
+    const [y] = t.date.split('-').map(Number);
+    return y === year;
   });
 };
 
 export const calculateMonthlyStats = (transactions: Transaction[], months: number = 6): MonthlyStats[] => {
   const stats: MonthlyStats[] = [];
   const now = new Date();
-  
+
   for (let i = months - 1; i >= 0; i--) {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const monthTransactions = filterTransactionsByMonth(transactions, date.getFullYear(), date.getMonth());
-    
+
     stats.push({
       month: date.toLocaleDateString('vi-VN', { month: 'short', year: 'numeric' }),
       income: calculateTotalIncome(monthTransactions),
@@ -56,7 +58,7 @@ export const calculateMonthlyStats = (transactions: Transaction[], months: numbe
       netIncome: calculateNetIncome(monthTransactions),
     });
   }
-  
+
   return stats;
 };
 
@@ -66,16 +68,16 @@ export const calculateCategorySpending = (
 ): CategorySpending[] => {
   const expenseTransactions = transactions.filter(t => t.type === TransactionType.EXPENSE);
   const totalExpense = calculateTotalExpense(transactions);
-  
+
   const categoryMap = new Map<string, number>();
-  
+
   expenseTransactions.forEach(t => {
     const current = categoryMap.get(t.categoryId) || 0;
     categoryMap.set(t.categoryId, current + t.amount);
   });
-  
+
   const result: CategorySpending[] = [];
-  
+
   categoryMap.forEach((amount, categoryId) => {
     const category = categories.find(c => c.id === categoryId);
     if (category) {
@@ -88,7 +90,7 @@ export const calculateCategorySpending = (
       });
     }
   });
-  
+
   return result.sort((a, b) => b.amount - a.amount);
 };
 
@@ -99,11 +101,11 @@ export const calculateBudgetUsage = (
   const now = new Date();
   const budgetTransactions = filterTransactionsByMonth(transactions, now.getFullYear(), now.getMonth())
     .filter(t => t.categoryId === budget.categoryId && t.type === TransactionType.EXPENSE);
-  
+
   const used = budgetTransactions.reduce((sum, t) => sum + t.amount, 0);
   const remaining = Math.max(0, budget.amount - used);
   const percentage = budget.amount > 0 ? (used / budget.amount) * 100 : 0;
-  
+
   return { used, remaining, percentage };
 };
 
@@ -142,12 +144,12 @@ export const generateFinancialAdvice = (
   const currentMonthTransactions = filterTransactionsByMonth(transactions, now.getFullYear(), now.getMonth());
   const totalExpense = calculateTotalExpense(currentMonthTransactions);
   const totalIncome = calculateTotalIncome(currentMonthTransactions);
-  
+
   // Check if spending exceeds income
   if (totalExpense > totalIncome) {
     advice.push('⚠️ Chi tiêu tháng này vượt quá thu nhập. Hãy cân nhắc giảm chi tiêu không cần thiết.');
   }
-  
+
   // Check budget overruns
   budgets.forEach(budget => {
     const usage = calculateBudgetUsage(budget, transactions);
@@ -157,7 +159,7 @@ export const generateFinancialAdvice = (
       advice.push(`⚠️ Bạn đã sử dụng ${usage.percentage.toFixed(0)}% ngân sách. Hãy cẩn thận chi tiêu.`);
     }
   });
-  
+
   // Savings advice
   const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpense) / totalIncome) * 100 : 0;
   if (savingsRate < 10) {
@@ -165,14 +167,14 @@ export const generateFinancialAdvice = (
   } else if (savingsRate >= 20) {
     advice.push('✅ Tuyệt vời! Bạn đang tiết kiệm được một tỷ lệ tốt.');
   }
-  
+
   // Predict next month
   const predictedExpense = predictNextMonthExpense(transactions);
   advice.push(`📊 Dự đoán chi tiêu tháng tới: ${formatCurrency(predictedExpense)}`);
-  
+
   if (advice.length === 1) {
     advice.unshift('✅ Tài chính của bạn đang trong tình trạng tốt!');
   }
-  
+
   return advice;
 };

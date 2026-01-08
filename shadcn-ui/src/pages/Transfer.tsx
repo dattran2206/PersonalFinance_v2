@@ -21,55 +21,30 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { accounts } from '@/lib/mockData';
+import { useAccounts, useTransactions } from '@/hooks/use-db';
+import { db } from '@/db/db';
+import { TransactionType } from '@/lib/types';
 import { formatCurrency } from '@/lib/calculations';
-import { ArrowRightLeft, CheckCircle, Clock } from 'lucide-react';
+import { ArrowRightLeft, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface TransferHistory {
-  id: string;
-  fromAccountId: string;
-  toAccountId: string;
-  amount: number;
-  date: string;
-  note: string;
-  status: 'completed' | 'pending';
-}
-
 export default function Transfer() {
+  const accounts = useAccounts() || [];
+  const transactions = useTransactions() || [];
+
   const [fromAccount, setFromAccount] = useState('');
   const [toAccount, setToAccount] = useState('');
   const [amount, setAmount] = useState('');
+  const [fee, setFee] = useState('');
   const [note, setNote] = useState('');
-  const [transferHistory, setTransferHistory] = useState<TransferHistory[]>([
-    {
-      id: '1',
-      fromAccountId: 'acc1',
-      toAccountId: 'acc2',
-      amount: 5000000,
-      date: '2024-12-28',
-      note: 'Chuyển tiền tiết kiệm',
-      status: 'completed',
-    },
-    {
-      id: '2',
-      fromAccountId: 'acc2',
-      toAccountId: 'acc3',
-      amount: 2000000,
-      date: '2024-12-27',
-      note: 'Nạp ví MoMo',
-      status: 'completed',
-    },
-    {
-      id: '3',
-      fromAccountId: 'acc1',
-      toAccountId: 'acc4',
-      amount: 1000000,
-      date: '2024-12-26',
-      note: 'Rút tiền mặt',
-      status: 'completed',
-    },
-  ]);
+  const [date, setDate] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
+
+  const transferHistory = transactions
+    .filter(t => t.type === TransactionType.TRANSFER)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const getAccountName = (accountId: string) => {
     return accounts.find((a) => a.id === accountId)?.name || 'Không xác định';
@@ -83,8 +58,8 @@ export default function Transfer() {
     return accounts.find((a) => a.id === accountId)?.balance || 0;
   };
 
-  const handleTransfer = () => {
-    if (!fromAccount || !toAccount || !amount) {
+  const handleTransfer = async () => {
+    if (!fromAccount || !toAccount || !amount || !date) {
       toast.error('Vui lòng điền đầy đủ thông tin!');
       return;
     }
@@ -95,42 +70,73 @@ export default function Transfer() {
     }
 
     const transferAmount = parseFloat(amount);
+    const transferFee = fee ? parseFloat(fee) : 0;
+    const totalDeduction = transferAmount + transferFee;
+
     if (transferAmount <= 0) {
       toast.error('Số tiền phải lớn hơn 0!');
       return;
     }
 
     const fromBalance = getAccountBalance(fromAccount);
-    if (transferAmount > fromBalance) {
-      toast.error('Số dư tài khoản nguồn không đủ!');
+    if (totalDeduction > fromBalance) {
+      toast.error(`Số dư không đủ (Cần: ${formatCurrency(totalDeduction)})`);
       return;
     }
 
-    const newTransfer: TransferHistory = {
-      id: Date.now().toString(),
-      fromAccountId: fromAccount,
-      toAccountId: toAccount,
-      amount: transferAmount,
-      date: new Date().toISOString().split('T')[0],
-      note: note || 'Chuyển tiền giữa các tài khoản',
-      status: 'completed',
-    };
+    try {
+      const now = Date.now();
 
-    setTransferHistory([newTransfer, ...transferHistory]);
-    toast.success('Chuyển tiền thành công!');
+      await db.transactions.add({
+        description: 'Chuyển khoản',
+        amount: transferAmount,
+        date: date,
+        type: TransactionType.TRANSFER as any, // Cast to match DB enum if strictly typed
+        categoryId: 'transfer', // Use a 'transfer' category ID or System defined
+        accountId: fromAccount,
+        toAccountId: toAccount,
+        fee: transferFee,
+        note: note,
+        createdAt: now,
+        updatedAt: now,
+        isDeleted: false,
+      });
 
-    // Reset form
-    setFromAccount('');
-    setToAccount('');
-    setAmount('');
-    setNote('');
+      // Update balances
+      const sourceAccount = accounts.find(a => a.id === fromAccount);
+      if (sourceAccount) {
+        await db.accounts.update(fromAccount, {
+          balance: sourceAccount.balance - totalDeduction,
+          updatedAt: now
+        });
+      }
+
+      const destAccount = accounts.find(a => a.id === toAccount);
+      if (destAccount) {
+        await db.accounts.update(toAccount, {
+          balance: destAccount.balance + transferAmount,
+          updatedAt: now
+        });
+      }
+
+      toast.success('Chuyển tiền thành công!');
+
+      // Reset form
+      setAmount('');
+      setFee('');
+      setNote('');
+      // Keep accounts selected for convenience
+    } catch (error) {
+      console.error("Transfer failed:", error);
+      toast.error("Có lỗi xảy ra khi chuyển tiền");
+    }
   };
 
   return (
     <Layout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Chuyển tiền giữa tài khoản</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Chuyển tiền</h1>
           <p className="text-gray-600">Quản lý dòng tiền giữa các tài khoản của bạn</p>
         </div>
 
@@ -199,15 +205,38 @@ export default function Transfer() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="amount">Số tiền chuyển</Label>
+                  <Input
+                    id="amount"
+                    type="number"
+                    placeholder="0"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="date">Ngày giao dịch</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="amount">Số tiền chuyển</Label>
+                <Label htmlFor="fee">Phí giao dịch (Nếu có)</Label>
                 <Input
-                  id="amount"
+                  id="fee"
                   type="number"
                   placeholder="0"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  value={fee}
+                  onChange={(e) => setFee(e.target.value)}
                 />
+                <p className="text-xs text-gray-500">Phí sẽ được trừ vào tài khoản nguồn</p>
               </div>
 
               <div className="space-y-2">
@@ -234,6 +263,14 @@ export default function Transfer() {
                     </p>
                     <p>
                       <strong>Số tiền:</strong> {formatCurrency(parseFloat(amount))}
+                    </p>
+                    {fee && parseFloat(fee) > 0 && (
+                      <p>
+                        <strong>Phí:</strong> {formatCurrency(parseFloat(fee))}
+                      </p>
+                    )}
+                    <p className="pt-2 font-bold">
+                      Tổng trừ ví nguồn: {formatCurrency(parseFloat(amount) + (parseFloat(fee) || 0))}
                     </p>
                   </div>
                 </div>
@@ -273,9 +310,9 @@ export default function Transfer() {
                     2
                   </div>
                   <div>
-                    <h4 className="font-semibold text-gray-900 mb-1">Nhập số tiền</h4>
+                    <h4 className="font-semibold text-gray-900 mb-1">Nhập số tiền & Phí</h4>
                     <p className="text-sm text-gray-600">
-                      Nhập số tiền muốn chuyển, đảm bảo số dư tài khoản nguồn đủ
+                      Nhập số tiền chuyển và phí giao dịch (nếu có). Tổng số tiền sẽ được trừ vào tài khoản nguồn.
                     </p>
                   </div>
                 </div>
@@ -315,8 +352,8 @@ export default function Transfer() {
                   <TableHead>Từ tài khoản</TableHead>
                   <TableHead>Đến tài khoản</TableHead>
                   <TableHead className="text-right">Số tiền</TableHead>
+                  <TableHead className="text-right">Phí</TableHead>
                   <TableHead>Ghi chú</TableHead>
-                  <TableHead>Trạng thái</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -327,33 +364,23 @@ export default function Transfer() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span>{getAccountIcon(transfer.fromAccountId)}</span>
-                        <span>{getAccountName(transfer.fromAccountId)}</span>
+                        <span>{getAccountIcon(transfer.accountId)}</span>
+                        <span>{getAccountName(transfer.accountId)}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span>{getAccountIcon(transfer.toAccountId)}</span>
-                        <span>{getAccountName(transfer.toAccountId)}</span>
+                        <span>{getAccountIcon(transfer.toAccountId || '')}</span>
+                        <span>{getAccountName(transfer.toAccountId || '')}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-semibold text-blue-600">
                       {formatCurrency(transfer.amount)}
                     </TableCell>
-                    <TableCell className="text-gray-600">{transfer.note}</TableCell>
-                    <TableCell>
-                      {transfer.status === 'completed' ? (
-                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
-                          <CheckCircle className="w-3 h-3 mr-1" />
-                          Hoàn thành
-                        </Badge>
-                      ) : (
-                        <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">
-                          <Clock className="w-3 h-3 mr-1" />
-                          Đang xử lý
-                        </Badge>
-                      )}
+                    <TableCell className="text-right text-gray-500">
+                      {transfer.fee ? formatCurrency(transfer.fee) : '-'}
                     </TableCell>
+                    <TableCell className="text-gray-600">{transfer.note}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

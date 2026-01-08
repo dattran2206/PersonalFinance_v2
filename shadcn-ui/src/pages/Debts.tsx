@@ -21,11 +21,12 @@ import {
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { debts } from '@/lib/mockData';
+import { useDebts } from '@/hooks/use-db';
 import { DebtType } from '@/lib/types';
 import { formatCurrency } from '@/lib/calculations';
-import { Plus, TrendingDown, TrendingUp, Calendar, DollarSign } from 'lucide-react';
+import { Plus, TrendingDown, TrendingUp, Calendar, DollarSign, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
+import { db } from '@/db/db';
 
 const debtTypeLabels: Record<DebtType, string> = {
   [DebtType.DEBT]: 'Nợ cần trả',
@@ -33,7 +34,10 @@ const debtTypeLabels: Record<DebtType, string> = {
 };
 
 export default function Debts() {
+  const debts = useDebts() || [];
   const [isOpen, setIsOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const [name, setName] = useState('');
   const [type, setType] = useState<DebtType>(DebtType.DEBT);
   const [amount, setAmount] = useState('');
@@ -44,15 +48,9 @@ export default function Debts() {
   const [monthlyPayment, setMonthlyPayment] = useState('');
   const [description, setDescription] = useState('');
 
-  const handleAddDebt = () => {
-    if (!name || !amount || !remainingAmount || !startDate || !dueDate) {
-      toast.error('Vui lòng điền đầy đủ thông tin!');
-      return;
-    }
-
-    toast.success('Thêm khoản nợ thành công!');
-    setIsOpen(false);
+  const resetForm = () => {
     setName('');
+    setType(DebtType.DEBT);
     setAmount('');
     setRemainingAmount('');
     setInterestRate('');
@@ -60,6 +58,78 @@ export default function Debts() {
     setDueDate('');
     setMonthlyPayment('');
     setDescription('');
+    setEditingId(null);
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) resetForm();
+  };
+
+  const handleEditClick = (debt: any) => {
+    setName(debt.name);
+    setType(debt.type);
+    setAmount(debt.amount.toString());
+    setRemainingAmount(debt.remainingAmount.toString());
+    setInterestRate(debt.interestRate.toString());
+    setStartDate(debt.startDate);
+    setDueDate(debt.dueDate);
+    setMonthlyPayment(debt.monthlyPayment ? debt.monthlyPayment.toString() : '');
+    setDescription(debt.description || '');
+    setEditingId(debt.id);
+    setIsOpen(true);
+  };
+
+  const handleSaveDebt = async () => {
+    if (!name || !amount || !remainingAmount || !startDate || !dueDate) {
+      toast.error('Vui lòng điền đầy đủ thông tin!');
+      return;
+    }
+
+    try {
+      const now = Date.now();
+      const debtData = {
+        name,
+        type,
+        amount: Number(amount),
+        remainingAmount: Number(remainingAmount),
+        interestRate: Number(interestRate || 0),
+        startDate,
+        dueDate,
+        monthlyPayment: monthlyPayment ? Number(monthlyPayment) : undefined,
+        description,
+        updatedAt: now,
+      };
+
+      if (editingId) {
+        await db.debts.update(editingId, debtData);
+        toast.success('Cập nhật khoản nợ thành công!');
+      } else {
+        await db.debts.add({
+          id: self.crypto.randomUUID(),
+          ...debtData,
+          createdAt: now,
+          isDeleted: false,
+        });
+        toast.success('Thêm khoản nợ thành công!');
+      }
+      setIsOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error("Failed to save debt:", error);
+      toast.error("Có lỗi xảy ra khi lưu khoản nợ");
+    }
+  };
+
+  const handleDeleteDebt = async (id: string, name: string) => {
+    if (!confirm(`Bạn có chắc chắn muốn xóa khoản nợ "${name}"?`)) return;
+    try {
+      await db.debts.delete(id);
+      toast.success(`Đã xóa khoản nợ ${name}`);
+    } catch (error) {
+      console.error("Failed to delete debt:", error);
+      toast.error("Có lỗi xảy ra khi xóa khoản nợ");
+    }
   };
 
   const totalDebt = debts
@@ -72,7 +142,10 @@ export default function Debts() {
 
   const getDaysRemaining = (dueDate: string) => {
     const today = new Date();
-    const due = new Date(dueDate);
+    today.setHours(0, 0, 0, 0);
+    const [y, m, d] = dueDate.split('-').map(Number);
+    const due = new Date(y, m - 1, d);
+
     const diffTime = due.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
@@ -87,7 +160,7 @@ export default function Debts() {
             <p className="text-gray-600">Quản lý các khoản nợ và cho vay của bạn</p>
           </div>
 
-          <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <Dialog open={isOpen} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>
               <Button className="bg-emerald-600 hover:bg-emerald-700">
                 <Plus className="w-4 h-4 mr-2" />
@@ -96,7 +169,7 @@ export default function Debts() {
             </DialogTrigger>
             <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Thêm khoản nợ mới</DialogTitle>
+                <DialogTitle>{editingId ? 'Chỉnh sửa khoản nợ' : 'Thêm khoản nợ mới'}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 mt-4">
                 <div className="space-y-2">
@@ -204,9 +277,14 @@ export default function Debts() {
                   />
                 </div>
 
-                <Button onClick={handleAddDebt} className="w-full">
-                  Thêm khoản nợ
-                </Button>
+                <div className="flex justify-end gap-3 mt-4">
+                  <Button variant="outline" onClick={() => handleOpenChange(false)}>
+                    Hủy
+                  </Button>
+                  <Button onClick={handleSaveDebt} className="bg-emerald-600 hover:bg-emerald-700">
+                    {editingId ? 'Cập nhật' : 'Thêm khoản nợ'}
+                  </Button>
+                </div>
               </div>
             </DialogContent>
           </Dialog>
@@ -240,12 +318,32 @@ export default function Debts() {
 
         <div className="space-y-4">
           {debts.map((debt) => {
-            const progress = ((debt.amount - debt.remainingAmount) / debt.amount) * 100;
+            const progress = debt.amount > 0
+              ? ((debt.amount - debt.remainingAmount) / debt.amount) * 100
+              : 0;
             const daysRemaining = getDaysRemaining(debt.dueDate);
 
             return (
-              <Card key={debt.id} className="hover:shadow-lg transition-shadow">
+              <Card key={debt.id} className="hover:shadow-lg transition-shadow relative group">
                 <CardContent className="pt-6">
+                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                      onClick={() => handleEditClick(debt)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteDebt(debt.id!, debt.name)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
@@ -286,7 +384,7 @@ export default function Debts() {
                         <span className="text-gray-600">Tiến độ trả nợ</span>
                         <span className="font-semibold">{progress.toFixed(1)}%</span>
                       </div>
-                      <Progress value={progress} className="h-2" />
+                      <Progress value={Math.min(progress, 100)} className="h-2" />
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-3 border-t">
@@ -318,7 +416,9 @@ export default function Debts() {
                       <div>
                         <p className="text-xs text-gray-600 mb-1">Còn lại</p>
                         <p
-                          className={`font-semibold ${daysRemaining < 30
+                          className={`font-semibold ${daysRemaining < 0
+                            ? 'text-red-800' // expired
+                            : daysRemaining < 30
                               ? 'text-red-600'
                               : daysRemaining < 90
                                 ? 'text-amber-600'

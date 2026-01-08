@@ -21,51 +21,90 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { budgets, categories, transactions } from '@/lib/mockData';
+import { useCategories, useTransactions, useBudgets } from '@/hooks/use-db';
 import { CategoryType, TransactionType } from '@/lib/types';
 import { formatCurrency } from '@/lib/calculations';
-import { Plus, AlertTriangle, CheckCircle, TrendingUp } from 'lucide-react';
+import { Plus, AlertTriangle, CheckCircle, TrendingUp, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { db } from '@/db/db';
 
 export default function Budget() {
+  const categories = useCategories() || [];
+  const transactions = useTransactions() || [];
+  const budgets = useBudgets() || [];
+
   const [isOpen, setIsOpen] = useState(false);
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
   const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly');
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
   const [endDate, setEndDate] = useState('');
   const [rollover, setRollover] = useState(false);
 
-  const handleAddBudget = () => {
+  const handleAddBudget = async () => {
     if (!categoryId || !amount) {
       toast.error('Vui lòng điền đầy đủ thông tin!');
       return;
     }
 
-    toast.success('Thêm ngân sách thành công!');
-    setIsOpen(false);
-    setCategoryId('');
-    setAmount('');
-    setPeriod('monthly');
-    setStartDate(new Date().toISOString().split('T')[0]);
-    setEndDate('');
-    setRollover(false);
+    try {
+      const now = Date.now();
+      await db.budgets.add({
+        id: self.crypto.randomUUID(),
+        categoryId,
+        amount: Number(amount),
+        period,
+        startDate,
+        endDate,
+        rollover,
+        createdAt: now,
+        updatedAt: now,
+        isDeleted: false
+      });
+
+      toast.success('Thêm ngân sách thành công!');
+      setIsOpen(false);
+      setCategoryId('');
+      setAmount('');
+      setPeriod('monthly');
+      setEndDate('');
+      setRollover(false);
+    } catch (error) {
+      console.error("Failed to add budget:", error);
+      toast.error("Có lỗi xảy ra khi thêm ngân sách");
+    }
+  };
+
+  const handleDeleteBudget = async (id: string) => {
+    if (!confirm('Bạn có chắc chắn muốn xóa ngân sách này?')) return;
+    try {
+      await db.budgets.delete(id);
+      toast.success('Đã xóa ngân sách');
+    } catch (error) {
+      console.error("Failed to delete budget:", error);
+      toast.error("Có lỗi xảy ra khi xóa ngân sách");
+    }
   };
 
   const expenseCategories = categories.filter((c) => c.type === CategoryType.EXPENSE);
 
   const getBudgetSpending = (budget: typeof budgets[0]) => {
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
+    const now = new Date();
+    const currentMonth = now.getMonth(); // 0-11
+    const currentYear = now.getFullYear();
 
     return transactions
       .filter((t) => {
-        const transactionDate = new Date(t.date);
+        // Safe date parsing from YYYY-MM-DD string
+        const [y, m, d] = t.date.split('-').map(Number);
+
         const isCurrentPeriod =
           budget.period === 'monthly'
-            ? transactionDate.getMonth() === currentMonth &&
-            transactionDate.getFullYear() === currentYear
-            : transactionDate.getFullYear() === currentYear;
+            ? (m - 1) === currentMonth && y === currentYear
+            : y === currentYear;
 
         return (
           t.type === TransactionType.EXPENSE &&
@@ -82,7 +121,7 @@ export default function Budget() {
 
   const totalBudget = budgets.reduce((sum, b) => sum + b.amount, 0);
   const totalSpent = budgets.reduce((sum, b) => sum + getBudgetSpending(b), 0);
-  const overallProgress = (totalSpent / totalBudget) * 100;
+  const overallProgress = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
   return (
     <Layout>
@@ -189,7 +228,7 @@ export default function Budget() {
                   />
                 </div>
 
-                <Button onClick={handleAddBudget} className="w-full">
+                <Button onClick={handleAddBudget} className="w-full bg-emerald-600 hover:bg-emerald-700">
                   Thêm ngân sách
                 </Button>
               </div>
@@ -247,20 +286,30 @@ export default function Budget() {
             return (
               <Card
                 key={budget.id}
-                className={`hover:shadow-lg transition-shadow ${isOverBudget ? 'border-red-300' : isNearLimit ? 'border-amber-300' : ''
+                className={`hover:shadow-lg transition-shadow relative group ${isOverBudget ? 'border-red-300' : isNearLimit ? 'border-amber-300' : ''
                   }`}
               >
                 <CardContent className="pt-6">
+                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteBudget(budget.id!)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <div
                         className="w-12 h-12 rounded-full flex items-center justify-center text-2xl"
                         style={{ backgroundColor: `${category?.color}20` }}
                       >
-                        {category?.icon}
+                        {category?.icon || '📦'}
                       </div>
                       <div>
-                        <h3 className="font-semibold text-lg">{category?.name}</h3>
+                        <h3 className="font-semibold text-lg">{category?.name || 'Danh mục đã xóa'}</h3>
                         <p className="text-sm text-gray-600">
                           {budget.period === 'monthly' ? 'Hàng tháng' : 'Hàng năm'}
                         </p>
@@ -307,10 +356,10 @@ export default function Budget() {
                       <Progress
                         value={Math.min(progress, 100)}
                         className={`h-2 ${isOverBudget
-                            ? '[&>div]:bg-red-600'
-                            : isNearLimit
-                              ? '[&>div]:bg-amber-500'
-                              : ''
+                          ? '[&>div]:bg-red-600'
+                          : isNearLimit
+                            ? '[&>div]:bg-amber-500'
+                            : ''
                           }`}
                       />
                     </div>
@@ -319,10 +368,10 @@ export default function Budget() {
                       <span className="text-sm text-gray-600">Còn lại</span>
                       <span
                         className={`font-semibold ${isOverBudget
-                            ? 'text-red-600'
-                            : remaining < budget.amount * 0.2
-                              ? 'text-amber-600'
-                              : 'text-emerald-600'
+                          ? 'text-red-600'
+                          : remaining < budget.amount * 0.2
+                            ? 'text-amber-600'
+                            : 'text-emerald-600'
                           }`}
                       >
                         {formatCurrency(Math.max(0, remaining))}

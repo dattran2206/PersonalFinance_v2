@@ -19,62 +19,49 @@ export default function RecentTransactions({
     return categories.find((c) => c.id === categoryId)?.name || 'Không xác định';
   };
 
-  const getAccountName = (accountId: string) => {
-    return accounts.find((a) => a.id === accountId)?.name || 'Không xác định';
-  };
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Giao dịch gần đây</CardTitle>
+    <Card className="h-full border-none shadow-none bg-transparent">
+      <CardHeader className="px-0 pt-0">
+        <CardTitle className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center justify-between">
+          <span>Giao dịch gần đây</span>
+          <span className="text-sm font-normal text-emerald-600 cursor-pointer hover:underline">Xem tất cả</span>
+        </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
+      <CardContent className="px-0">
+        <div className="space-y-3">
           {transactions.slice(0, 5).map((transaction) => (
             <div
               key={transaction.id}
-              className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
+              className="group flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 hover:shadow-md transition-all duration-200"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <div
-                  className={`p-2 rounded-full ${
-                    transaction.type === TransactionType.INCOME
-                      ? 'bg-emerald-100'
-                      : 'bg-red-100'
-                  }`}
+                  className={`p-3 rounded-xl transition-colors ${transaction.type === TransactionType.INCOME
+                      ? 'bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600'
+                      : 'bg-red-50 dark:bg-red-500/20 text-red-600'
+                    }`}
                 >
                   {transaction.type === TransactionType.INCOME ? (
-                    <ArrowUpRight className="w-4 h-4 text-emerald-600" />
+                    <ArrowUpRight className="w-5 h-5" />
                   ) : (
-                    <ArrowDownRight className="w-4 h-4 text-red-600" />
+                    <ArrowDownRight className="w-5 h-5" />
                   )}
                 </div>
                 <div>
-                  <p className="font-medium text-gray-900">{transaction.description}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant="outline" className="text-xs">
-                      {getCategoryName(transaction.categoryId)}
-                    </Badge>
-                    <span className="text-xs text-gray-500">
-                      {getAccountName(transaction.accountId)}
-                    </span>
-                  </div>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{transaction.description}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {new Date(transaction.date).toLocaleDateString('vi-VN')} • {getCategoryName(transaction.categoryId)}
+                  </p>
                 </div>
               </div>
-              <div className="text-right">
-                <p
-                  className={`font-semibold ${
-                    transaction.type === TransactionType.INCOME
-                      ? 'text-emerald-600'
-                      : 'text-red-600'
+              <div
+                className={`font-bold font-display ${transaction.type === TransactionType.INCOME
+                    ? 'text-emerald-600'
+                    : 'text-gray-900 dark:text-white'
                   }`}
-                >
-                  {transaction.type === TransactionType.INCOME ? '+' : '-'}
-                  {formatCurrency(transaction.amount)}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {new Date(transaction.date).toLocaleDateString('vi-VN')}
-                </p>
+              >
+                {transaction.type === TransactionType.INCOME ? '+' : '-'}
+                {formatCurrency(transaction.amount)}
               </div>
             </div>
           ))}

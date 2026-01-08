@@ -1,7 +1,9 @@
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { transactions, budgets } from '@/lib/mockData';
+import { useTransactions } from '@/hooks/use-db';
+// import { transactions, budgets } from '@/lib/mockData'; // Removed
+const budgets: any[] = []; // Placeholder until Budget feature is implemented
 import {
   predictNextMonthExpense,
   generateFinancialAdvice,
@@ -21,9 +23,10 @@ import {
 import { Lightbulb, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function Predictions() {
-  const predictedExpense = predictNextMonthExpense(transactions);
-  const advice = generateFinancialAdvice(transactions, budgets);
-  const monthlyStats = calculateMonthlyStats(transactions, 6);
+  const transactions = useTransactions() || [];
+  const predictedExpense = predictNextMonthExpense(transactions as any[]);
+  const advice = generateFinancialAdvice(transactions as any[], budgets);
+  const monthlyStats = calculateMonthlyStats(transactions as any[], 6);
 
   const forecastData = [
     ...monthlyStats,
@@ -111,7 +114,7 @@ export default function Predictions() {
                   strokeWidth={2}
                   name="Chi tiêu"
                   dot={{ fill: '#EF4444', r: 4 }}
-                  strokeDasharray={(entry) => (entry.month === 'Tháng tới' ? '5 5' : '0')}
+                  strokeDasharray="0"
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -141,13 +144,12 @@ export default function Predictions() {
                 return (
                   <div
                     key={index}
-                    className={`flex items-start gap-3 p-4 rounded-lg border ${
-                      isWarning
-                        ? 'bg-red-50 border-red-200'
-                        : isSuccess
+                    className={`flex items-start gap-3 p-4 rounded-lg border ${isWarning
+                      ? 'bg-red-50 border-red-200'
+                      : isSuccess
                         ? 'bg-emerald-50 border-emerald-200'
                         : 'bg-blue-50 border-blue-200'
-                    }`}
+                      }`}
                   >
                     {isWarning ? (
                       <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -157,13 +159,12 @@ export default function Predictions() {
                       <Lightbulb className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                     )}
                     <p
-                      className={`text-sm ${
-                        isWarning
-                          ? 'text-red-900'
-                          : isSuccess
+                      className={`text-sm ${isWarning
+                        ? 'text-red-900'
+                        : isSuccess
                           ? 'text-emerald-900'
                           : 'text-blue-900'
-                      }`}
+                        }`}
                     >
                       {item}
                     </p>

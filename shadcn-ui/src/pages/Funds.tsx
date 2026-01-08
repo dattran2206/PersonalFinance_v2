@@ -14,10 +14,11 @@ import {
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { funds } from '@/lib/mockData';
+import { useFunds } from '@/hooks/use-db';
 import { formatCurrency } from '@/lib/calculations';
-import { Plus, Target, Calendar, TrendingUp } from 'lucide-react';
+import { Plus, Target, Calendar, TrendingUp, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
+import { db } from '@/db/db';
 
 const fundIcons = ['🚨', '✈️', '🏡', '👴', '🎓', '💍', '🚗', '📱', '🎯', '💰'];
 const fundColors = [
@@ -32,7 +33,10 @@ const fundColors = [
 ];
 
 export default function Funds() {
+  const funds = useFunds() || [];
   const [isOpen, setIsOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const [name, setName] = useState('');
   const [targetAmount, setTargetAmount] = useState('');
   const [currentAmount, setCurrentAmount] = useState('');
@@ -41,14 +45,7 @@ export default function Funds() {
   const [icon, setIcon] = useState('🎯');
   const [color, setColor] = useState('#10B981');
 
-  const handleAddFund = () => {
-    if (!name || !targetAmount || !currentAmount) {
-      toast.error('Vui lòng điền đầy đủ thông tin!');
-      return;
-    }
-
-    toast.success('Thêm quỹ tiết kiệm thành công!');
-    setIsOpen(false);
+  const resetForm = () => {
     setName('');
     setTargetAmount('');
     setCurrentAmount('');
@@ -56,16 +53,96 @@ export default function Funds() {
     setDeadline('');
     setIcon('🎯');
     setColor('#10B981');
+    setEditingId(null);
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) resetForm();
+  };
+
+  const handleEditClick = (fund: any) => {
+    setName(fund.name);
+    setTargetAmount(fund.targetAmount.toString());
+    setCurrentAmount(fund.currentAmount.toString());
+    setDescription(fund.description || '');
+    setDeadline(fund.deadline || '');
+    setIcon(fund.icon);
+    setColor(fund.color);
+    setEditingId(fund.id);
+    setIsOpen(true);
+  };
+
+  const handleSaveFund = async () => {
+    if (!name || !targetAmount) {
+      toast.error('Vui lòng điền tên và mục tiêu!');
+      return;
+    }
+
+    try {
+      const now = Date.now();
+      if (editingId) {
+        // Update
+        await db.funds.update(editingId, {
+          name,
+          targetAmount: Number(targetAmount),
+          currentAmount: Number(currentAmount || 0),
+          description,
+          deadline,
+          icon,
+          color,
+          updatedAt: now
+        });
+        toast.success('Cập nhật quỹ thành công!');
+      } else {
+        // Create
+        await db.funds.add({
+          id: self.crypto.randomUUID(),
+          name,
+          targetAmount: Number(targetAmount),
+          currentAmount: Number(currentAmount || 0),
+          description,
+          deadline,
+          icon,
+          color,
+          createdAt: now,
+          updatedAt: now,
+          isDeleted: false
+        });
+        toast.success('Thêm quỹ thành công!');
+      }
+      setIsOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error("Failed to save fund:", error);
+      toast.error("Có lỗi xảy ra khi lưu quỹ");
+    }
+  };
+
+  const handleDeleteFund = async (id: string, name: string) => {
+    if (!confirm(`Bạn có chắc chắn muốn xóa quỹ "${name}"?`)) return;
+    try {
+      await db.funds.delete(id);
+      toast.success(`Đã xóa quỹ ${name}`);
+    } catch (error) {
+      console.error("Failed to delete fund:", error);
+      toast.error("Có lỗi xảy ra khi xóa quỹ");
+    }
   };
 
   const totalSaved = funds.reduce((sum, fund) => sum + fund.currentAmount, 0);
   const totalTarget = funds.reduce((sum, fund) => sum + fund.targetAmount, 0);
-  const overallProgress = (totalSaved / totalTarget) * 100;
+  const overallProgress = totalTarget > 0 ? (totalSaved / totalTarget) * 100 : 0;
 
   const getDaysRemaining = (deadline: string | null) => {
     if (!deadline) return null;
     const today = new Date();
-    const due = new Date(deadline);
+    today.setHours(0, 0, 0, 0); // Reset time part
+
+    // Parse local date
+    const [y, m, d] = deadline.split('-').map(Number);
+    const due = new Date(y, m - 1, d);
+
     const diffTime = due.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
@@ -80,7 +157,7 @@ export default function Funds() {
             <p className="text-gray-600">Theo dõi các mục tiêu tiết kiệm của bạn</p>
           </div>
 
-          <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <Dialog open={isOpen} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>
               <Button className="bg-emerald-600 hover:bg-emerald-700">
                 <Plus className="w-4 h-4 mr-2" />
@@ -89,7 +166,7 @@ export default function Funds() {
             </DialogTrigger>
             <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Thêm quỹ tiết kiệm mới</DialogTitle>
+                <DialogTitle>{editingId ? 'Chỉnh sửa quỹ tiết kiệm' : 'Thêm quỹ tiết kiệm mới'}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 mt-4">
                 <div className="space-y-2">
@@ -154,8 +231,8 @@ export default function Funds() {
                         key={i}
                         onClick={() => setIcon(i)}
                         className={`text-2xl p-2 rounded-lg border-2 transition-colors ${icon === i
-                            ? 'border-emerald-600 bg-emerald-50'
-                            : 'border-gray-200 hover:border-gray-300'
+                          ? 'border-emerald-600 bg-emerald-50'
+                          : 'border-gray-200 hover:border-gray-300'
                           }`}
                       >
                         {i}
@@ -179,9 +256,14 @@ export default function Funds() {
                   </div>
                 </div>
 
-                <Button onClick={handleAddFund} className="w-full">
-                  Thêm quỹ
-                </Button>
+                <div className="flex justify-end gap-3 mt-4">
+                  <Button variant="outline" onClick={() => handleOpenChange(false)}>
+                    Hủy
+                  </Button>
+                  <Button onClick={handleSaveFund} className="bg-emerald-600 hover:bg-emerald-700">
+                    {editingId ? 'Cập nhật' : 'Thêm quỹ'}
+                  </Button>
+                </div>
               </div>
             </DialogContent>
           </Dialog>
@@ -229,8 +311,26 @@ export default function Funds() {
             const daysRemaining = fund.deadline ? getDaysRemaining(fund.deadline) : null;
 
             return (
-              <Card key={fund.id} className="hover:shadow-lg transition-shadow">
+              <Card key={fund.id} className="hover:shadow-lg transition-shadow relative group">
                 <CardContent className="pt-6">
+                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                      onClick={() => handleEditClick(fund)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteFund(fund.id!, fund.name)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <div className="flex items-start justify-between mb-4">
                     <div
                       className="w-14 h-14 rounded-full flex items-center justify-center text-3xl"
@@ -242,11 +342,13 @@ export default function Funds() {
                       <Badge
                         variant="outline"
                         className={
-                          daysRemaining < 30
-                            ? 'border-red-200 text-red-700'
-                            : daysRemaining < 90
-                              ? 'border-amber-200 text-amber-700'
-                              : 'border-emerald-200 text-emerald-700'
+                          daysRemaining < 0
+                            ? 'border-gray-200 text-gray-500' // expired
+                            : daysRemaining < 30
+                              ? 'border-red-200 text-red-700'
+                              : daysRemaining < 90
+                                ? 'border-amber-200 text-amber-700'
+                                : 'border-emerald-200 text-emerald-700'
                         }
                       >
                         <Calendar className="w-3 h-3 mr-1" />
@@ -278,7 +380,7 @@ export default function Funds() {
                         <span className="text-gray-600">Tiến độ</span>
                         <span className="font-semibold">{progress.toFixed(1)}%</span>
                       </div>
-                      <Progress value={progress} className="h-2" />
+                      <Progress value={Math.min(progress, 100)} className="h-2" />
                     </div>
 
                     <div className="flex items-center justify-between pt-3 border-t">

@@ -18,12 +18,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { accounts } from '@/lib/mockData';
+import { useAccounts } from '@/hooks/use-db';
 import { AccountType } from '@/lib/types';
 import { formatCurrency } from '@/lib/calculations';
-import { Plus, Wallet, CreditCard, Calendar } from 'lucide-react';
+import { Plus, Wallet, CreditCard, Calendar, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { db } from '@/db/db';
 
 const accountTypeLabels: Record<AccountType, string> = {
   [AccountType.BANK]: 'Ngân hàng',
@@ -44,7 +45,11 @@ const accountColors = [
 ];
 
 export default function Accounts() {
+  const accounts = useAccounts();
   const [isOpen, setIsOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Form State
   const [name, setName] = useState('');
   const [type, setType] = useState<AccountType>(AccountType.BANK);
   const [balance, setBalance] = useState('');
@@ -53,7 +58,45 @@ export default function Accounts() {
   const [creditLimit, setCreditLimit] = useState('');
   const [dueDate, setDueDate] = useState('');
 
-  const handleAddAccount = () => {
+  if (!accounts) {
+    return (
+      <Layout>
+        <div className="flex h-[80vh] items-center justify-center">
+          <div className="text-gray-500">Đang tải dữ liệu...</div>
+        </div>
+      </Layout>
+    )
+  }
+
+  const resetForm = () => {
+    setName('');
+    setType(AccountType.BANK);
+    setBalance('');
+    setIcon('🏦');
+    setColor('#10B981');
+    setCreditLimit('');
+    setDueDate('');
+    setEditingId(null);
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) resetForm();
+  };
+
+  const handleEditClick = (account: any) => {
+    setName(account.name);
+    setType(account.type);
+    setBalance(account.balance.toString());
+    setIcon(account.icon || '🏦');
+    setColor(account.color || '#10B981');
+    setCreditLimit(account.creditLimit?.toString() || '');
+    setDueDate(account.dueDate || '');
+    setEditingId(account.id);
+    setIsOpen(true);
+  };
+
+  const handleSaveAccount = async () => {
     if (!name || !balance) {
       toast.error('Vui lòng điền đầy đủ thông tin!');
       return;
@@ -64,14 +107,69 @@ export default function Accounts() {
       return;
     }
 
-    toast.success('Thêm tài khoản thành công!');
-    setIsOpen(false);
-    setName('');
-    setBalance('');
-    setIcon('🏦');
-    setColor('#10B981');
-    setCreditLimit('');
-    setDueDate('');
+    try {
+      const now = Date.now();
+
+      if (editingId) {
+        // Update existing account
+        await db.accounts.update(editingId, {
+          name,
+          balance: Number(balance),
+          type,
+          icon,
+          color,
+          creditLimit: creditLimit ? Number(creditLimit) : undefined,
+          dueDate,
+          updatedAt: now
+        });
+        toast.success('Cập nhật tài khoản thành công!');
+      } else {
+        // Create new account
+        const accountData = {
+          id: self.crypto.randomUUID(),
+          name: name,
+          balance: Number(balance),
+          type: type,
+          icon: icon,
+          color: color,
+          creditLimit: creditLimit ? Number(creditLimit) : undefined,
+          dueDate: dueDate,
+          createdAt: now,
+          updatedAt: now,
+          isDeleted: false
+        };
+        await db.accounts.add(accountData);
+        toast.success('Thêm tài khoản thành công!');
+      }
+
+      setIsOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error("Failed to save account:", error);
+      toast.error("Có lỗi xảy ra khi lưu tài khoản");
+    }
+  };
+
+  const handleDeleteAccount = async (id: string, name: string) => {
+    try {
+      // Check if any transactions use this account
+      const countSource = await db.transactions.where('accountId').equals(id).count();
+      const countDest = await db.transactions.filter(t => t.toAccountId === id).count();
+      const totalUsage = countSource + countDest;
+
+      if (totalUsage > 0) {
+        toast.error(`Không thể xóa tài khoản "${name}" vì đang có ${totalUsage} giao dịch liên quan!`);
+        return;
+      }
+
+      if (!confirm(`Bạn có chắc chắn muốn xóa tài khoản "${name}"?`)) return;
+
+      await db.accounts.delete(id);
+      toast.success(`Đã xóa tài khoản ${name}`);
+    } catch (error) {
+      console.error("Failed to delete account:", error);
+      toast.error("Có lỗi xảy ra khi xóa tài khoản");
+    }
   };
 
   const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
@@ -85,7 +183,7 @@ export default function Accounts() {
             <p className="text-gray-600">Quản lý các tài khoản tài chính của bạn</p>
           </div>
 
-          <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <Dialog open={isOpen} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>
               <Button className="bg-emerald-600 hover:bg-emerald-700">
                 <Plus className="w-4 h-4 mr-2" />
@@ -94,7 +192,7 @@ export default function Accounts() {
             </DialogTrigger>
             <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Thêm tài khoản mới</DialogTitle>
+                <DialogTitle>{editingId ? 'Chỉnh sửa tài khoản' : 'Thêm tài khoản mới'}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 mt-4">
                 <div className="space-y-2">
@@ -135,6 +233,11 @@ export default function Accounts() {
                     value={balance}
                     onChange={(e) => setBalance(e.target.value)}
                   />
+                  {editingId && (
+                    <p className="text-xs text-amber-600 italic">
+                      Lưu ý: Thay đổi số dư tại đây sẽ không tạo giao dịch điều chỉnh.
+                    </p>
+                  )}
                 </div>
 
                 {type === AccountType.CREDIT_CARD && (
@@ -170,8 +273,8 @@ export default function Accounts() {
                         key={i}
                         onClick={() => setIcon(i)}
                         className={`text-2xl p-2 rounded-lg border-2 transition-colors ${icon === i
-                            ? 'border-emerald-600 bg-emerald-50'
-                            : 'border-gray-200 hover:border-gray-300'
+                          ? 'border-emerald-600 bg-emerald-50'
+                          : 'border-gray-200 hover:border-gray-300'
                           }`}
                       >
                         {i}
@@ -195,9 +298,14 @@ export default function Accounts() {
                   </div>
                 </div>
 
-                <Button onClick={handleAddAccount} className="w-full">
-                  Thêm tài khoản
-                </Button>
+                <div className="flex justify-end gap-3 mt-4">
+                  <Button variant="outline" onClick={() => handleOpenChange(false)}>
+                    Hủy
+                  </Button>
+                  <Button onClick={handleSaveAccount} className="bg-emerald-600 hover:bg-emerald-700">
+                    {editingId ? 'Cập nhật' : 'Thêm tài khoản'}
+                  </Button>
+                </div>
               </div>
             </DialogContent>
           </Dialog>
@@ -217,8 +325,26 @@ export default function Accounts() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {accounts.map((account) => (
-            <Card key={account.id} className="hover:shadow-lg transition-shadow">
+            <Card key={account.id} className="hover:shadow-lg transition-shadow relative group">
               <CardContent className="pt-6">
+                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                    onClick={() => handleEditClick(account)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                    onClick={() => handleDeleteAccount(account.id, account.name)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
                 <div className="flex items-start justify-between mb-4">
                   <div
                     className="w-12 h-12 rounded-full flex items-center justify-center text-2xl"

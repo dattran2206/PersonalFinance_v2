@@ -28,11 +28,12 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { transactions, categories, accounts } from '@/lib/mockData';
+import { useTransactions, useCategories, useAccounts } from '@/hooks/use-db';
 import { TransactionType, RecurrenceType } from '@/lib/types';
 import { formatCurrency } from '@/lib/calculations';
-import { Plus, Search, ArrowUpCircle, ArrowDownCircle, Repeat } from 'lucide-react';
+import { Plus, Search, ArrowUpCircle, ArrowDownCircle, Repeat, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { db } from '@/db/db';
 
 const transactionTypeLabels: Record<TransactionType, string> = {
   [TransactionType.INCOME]: 'Thu nhập',
@@ -49,12 +50,19 @@ const recurrenceLabels: Record<RecurrenceType, string> = {
 };
 
 export default function Transactions() {
+  const transactions = useTransactions();
+  const categories = useCategories();
+  const accounts = useAccounts();
+
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
 
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [categoryId, setCategoryId] = useState('');
@@ -65,7 +73,17 @@ export default function Transactions() {
   const [note, setNote] = useState('');
   const [recurrence, setRecurrence] = useState<RecurrenceType>(RecurrenceType.NONE);
 
-  const handleAddTransaction = () => {
+  if (!transactions || !categories || !accounts) {
+    return (
+      <Layout>
+        <div className="flex h-[80vh] items-center justify-center">
+          <div className="text-gray-500">Đang tải dữ liệu...</div>
+        </div>
+      </Layout>
+    )
+  }
+
+  const handleAddTransaction = async () => {
     if (!amount || !accountId) {
       toast.error('Vui lòng điền đầy đủ thông tin!');
       return;
@@ -76,21 +94,128 @@ export default function Transactions() {
       return;
     }
 
-    if (type === TransactionType.TRANSFER && !toAccountId) {
-      toast.error('Vui lòng chọn tài khoản đích!');
-      return;
+    if (type === TransactionType.TRANSFER) {
+      if (!toAccountId) {
+        toast.error('Vui lòng chọn tài khoản đích!');
+        return;
+      }
+      if (accountId === toAccountId) {
+        toast.error('Không thể chuyển khoản đến cùng một tài khoản!');
+        return;
+      }
     }
 
-    toast.success('Thêm giao dịch thành công!');
-    setIsOpen(false);
-    setAmount('');
-    setCategoryId('');
-    setAccountId('');
-    setToAccountId('');
-    setFee('');
-    setDescription('');
-    setNote('');
-    setRecurrence(RecurrenceType.NONE);
+    // Check balance for Expense and Transfer
+    if (type === TransactionType.EXPENSE || type === TransactionType.TRANSFER) {
+      const sourceAccount = accounts?.find(a => a.id === accountId);
+      if (sourceAccount) {
+        const totalAmount = Number(amount) + (type === TransactionType.TRANSFER && fee ? Number(fee) : 0);
+        if (sourceAccount.balance < totalAmount) {
+          toast.error('Số dư tài khoản không đủ để thực hiện giao dịch!');
+          return;
+        }
+      }
+    }
+
+    try {
+      const now = Date.now();
+      const transactionData = {
+        description: description || '',
+        amount: Number(amount),
+        date: date, // ISO Date string from input type="date"
+        type: type,
+        categoryId: categoryId || '',
+        accountId: accountId,
+        toAccountId: toAccountId,
+        fee: fee ? Number(fee) : undefined,
+        note: note,
+        recurrence: recurrence,
+        createdAt: now,
+        updatedAt: now,
+        isDeleted: false,
+      };
+
+      await db.transactions.add(transactionData);
+
+      // Handle account balance updates
+      const sourceAccount = accounts.find((a) => a.id === accountId);
+      if (sourceAccount) {
+        let newBalance = sourceAccount.balance;
+        if (type === TransactionType.EXPENSE) {
+          newBalance -= Number(amount);
+        } else if (type === TransactionType.INCOME) {
+          newBalance += Number(amount);
+        } else if (type === TransactionType.TRANSFER) {
+          newBalance -= Number(amount);
+          if (fee) newBalance -= Number(fee);
+        }
+        await db.accounts.update(accountId, { balance: newBalance, updatedAt: now });
+      }
+
+      if (type === TransactionType.TRANSFER && toAccountId) {
+        const destAccount = accounts.find((a) => a.id === toAccountId);
+        if (destAccount) {
+          const newDestBalance = destAccount.balance + Number(amount);
+          await db.accounts.update(toAccountId, { balance: newDestBalance, updatedAt: now });
+        }
+      }
+
+      toast.success('Thêm giao dịch thành công!');
+      setIsOpen(false);
+      setAmount('');
+      setCategoryId('');
+      setAccountId('');
+      setToAccountId('');
+      setFee('');
+      setDescription('');
+      setNote('');
+      setRecurrence(RecurrenceType.NONE);
+    } catch (error) {
+      console.error("Failed to add transaction:", error);
+      toast.error("Có lỗi xảy ra khi lưu giao dịch");
+    }
+  };
+
+  const handleDeleteTransaction = async (id: number) => {
+    if (!confirm('Bạn có chắc chắn muốn xóa giao dịch này?')) return;
+
+    try {
+      const transaction = transactions.find((t) => t.id === id);
+      if (!transaction) return;
+
+      const now = Date.now();
+      await db.transactions.delete(id);
+
+      // Revert account balance
+      const sourceAccount = accounts.find((a) => a.id === transaction.accountId);
+      if (sourceAccount) {
+        let newBalance = sourceAccount.balance;
+
+        // Reverse logic
+        if (transaction.type === TransactionType.EXPENSE) {
+          newBalance += transaction.amount;
+        } else if (transaction.type === TransactionType.INCOME) {
+          newBalance -= transaction.amount;
+        } else if (transaction.type === TransactionType.TRANSFER) {
+          newBalance += transaction.amount;
+          if (transaction.fee) newBalance += transaction.fee;
+        }
+        await db.accounts.update(sourceAccount.id, { balance: newBalance, updatedAt: now });
+      }
+
+      if (transaction.type === TransactionType.TRANSFER && transaction.toAccountId) {
+        const destAccount = accounts.find((a) => a.id === transaction.toAccountId);
+        if (destAccount) {
+          const newDestBalance = destAccount.balance - transaction.amount; // Reverse transfer
+          await db.accounts.update(destAccount.id, { balance: newDestBalance, updatedAt: now });
+        }
+      }
+
+      toast.success('Đã xóa giao dịch và cập nhật số dư!');
+    } catch (error) {
+      console.error("Failed to delete transaction:", error);
+      toast.error("Có lỗi xảy ra khi xóa giao dịch");
+    }
   };
 
   const getCategoryName = (categoryId?: string) => {
@@ -109,7 +234,7 @@ export default function Transactions() {
 
   const filteredTransactions = transactions.filter((transaction) => {
     const matchesSearch =
-      transaction.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (transaction.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       getCategoryName(transaction.categoryId).toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesType = filterType === 'all' || transaction.type === filterType;
@@ -386,6 +511,7 @@ export default function Transactions() {
                     <TableHead>Mô tả</TableHead>
                     <TableHead className="text-right">Số tiền</TableHead>
                     <TableHead>Lặp lại</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -424,10 +550,10 @@ export default function Transactions() {
                           )}
                           <span
                             className={`font-semibold ${transaction.type === TransactionType.INCOME
-                                ? 'text-emerald-600'
-                                : transaction.type === TransactionType.TRANSFER
-                                  ? 'text-blue-600'
-                                  : 'text-red-600'
+                              ? 'text-emerald-600'
+                              : transaction.type === TransactionType.TRANSFER
+                                ? 'text-blue-600'
+                                : 'text-red-600'
                               }`}
                           >
                             {transaction.type === TransactionType.INCOME ? '+' : transaction.type === TransactionType.TRANSFER ? '' : '-'}
@@ -446,6 +572,16 @@ export default function Transactions() {
                             {recurrenceLabels[transaction.recurrence]}
                           </Badge>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => handleDeleteTransaction(transaction.id!)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

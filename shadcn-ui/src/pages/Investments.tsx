@@ -29,7 +29,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { investments } from '@/lib/mockData';
+import { useInvestments } from '@/hooks/use-db';
 import { InvestmentType } from '@/lib/types';
 import {
   formatCurrency,
@@ -38,11 +38,102 @@ import {
   calculateInvestmentProfitPercentage,
 } from '@/lib/calculations';
 import { Plus, TrendingUp, TrendingDown, Pencil, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { db } from '@/db/db';
 
 export default function Investments() {
+  const investments = useInvestments() || [];
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  const getInvestmentTypeLabel = (type: InvestmentType) => {
+  const [name, setName] = useState('');
+  const [type, setType] = useState<InvestmentType>(InvestmentType.STOCK);
+  const [purchasePrice, setPurchasePrice] = useState('');
+  const [currentPrice, setCurrentPrice] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState('');
+  const [description, setDescription] = useState('');
+
+  const resetForm = () => {
+    setName('');
+    setType(InvestmentType.STOCK);
+    setPurchasePrice('');
+    setCurrentPrice('');
+    setQuantity('');
+    setPurchaseDate('');
+    setDescription('');
+    setEditingId(null);
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) resetForm();
+  };
+
+  const handleEditClick = (inv: any) => {
+    setName(inv.name);
+    // Cast string from DB back to Enum if needed, or just use string
+    setType(inv.type as InvestmentType);
+    setPurchasePrice(inv.purchasePrice.toString());
+    setCurrentPrice(inv.currentPrice.toString());
+    setQuantity(inv.quantity.toString());
+    setPurchaseDate(inv.purchaseDate);
+    setDescription(inv.description || '');
+    setEditingId(inv.id);
+    setIsDialogOpen(true);
+  };
+
+  const handleSaveInvestment = async () => {
+    if (!name || !purchasePrice || !quantity || !purchaseDate) {
+      toast.error('Vui lòng điền đầy đủ thông tin!');
+      return;
+    }
+
+    try {
+      const now = Date.now();
+      const invData = {
+        name,
+        type,
+        purchasePrice: Number(purchasePrice),
+        currentPrice: Number(currentPrice || purchasePrice), // Default to purchase price if empty
+        quantity: Number(quantity),
+        purchaseDate,
+        description,
+        updatedAt: now,
+      };
+
+      if (editingId) {
+        await db.investments.update(editingId, invData);
+        toast.success('Cập nhật khoản đầu tư thành công!');
+      } else {
+        await db.investments.add({
+          id: self.crypto.randomUUID(),
+          ...invData,
+          createdAt: now,
+          isDeleted: false,
+        });
+        toast.success('Thêm khoản đầu tư thành công!');
+      }
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error("Failed to save investment:", error);
+      toast.error("Có lỗi xảy ra khi lưu khoản đầu tư");
+    }
+  };
+
+  const handleDeleteInvestment = async (id: string, name: string) => {
+    if (!confirm(`Bạn có chắc chắn muốn xóa khoản đầu tư "${name}"?`)) return;
+    try {
+      await db.investments.delete(id);
+      toast.success(`Đã xóa khoản đầu tư ${name}`);
+    } catch (error) {
+      console.error("Failed to delete investment:", error);
+      toast.error("Có lỗi xảy ra khi xóa khoản đầu tư");
+    }
+  };
+
+  const getInvestmentTypeLabel = (type: string) => {
     switch (type) {
       case InvestmentType.STOCK:
         return 'Cổ phiếu';
@@ -67,8 +158,9 @@ export default function Investments() {
     (sum, inv) => sum + calculateInvestmentProfit(inv),
     0
   );
+  const totalInvested = totalValue - totalProfit;
   const totalProfitPercentage =
-    totalValue > 0 ? (totalProfit / (totalValue - totalProfit)) * 100 : 0;
+    totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
 
   return (
     <Layout>
@@ -78,7 +170,7 @@ export default function Investments() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Quản lý đầu tư</h1>
             <p className="text-gray-600">Theo dõi danh mục đầu tư của bạn</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>
               <Button className="bg-emerald-600 hover:bg-emerald-700">
                 <Plus className="w-4 h-4 mr-2" />
@@ -87,17 +179,22 @@ export default function Investments() {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Thêm khoản đầu tư mới</DialogTitle>
+                <DialogTitle>{editingId ? 'Chỉnh sửa khoản đầu tư' : 'Thêm khoản đầu tư mới'}</DialogTitle>
                 <DialogDescription>Ghi nhận khoản đầu tư của bạn</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
                   <Label htmlFor="invName">Tên khoản đầu tư</Label>
-                  <Input id="invName" placeholder="VNM - Vinamilk" />
+                  <Input
+                    id="invName"
+                    placeholder="VNM - Vinamilk"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="invType">Loại đầu tư</Label>
-                  <Select defaultValue="stock">
+                  <Select value={type} onValueChange={(val) => setType(val as InvestmentType)}>
                     <SelectTrigger id="invType">
                       <SelectValue />
                     </SelectTrigger>
@@ -112,30 +209,60 @@ export default function Investments() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="purchasePrice">Giá mua</Label>
-                  <Input id="purchasePrice" type="number" placeholder="0" />
+                  <Input
+                    id="purchasePrice"
+                    type="number"
+                    placeholder="0"
+                    value={purchasePrice}
+                    onChange={(e) => setPurchasePrice(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="currentPrice">Giá hiện tại</Label>
-                  <Input id="currentPrice" type="number" placeholder="0" />
+                  <Input
+                    id="currentPrice"
+                    type="number"
+                    placeholder="0"
+                    value={currentPrice}
+                    onChange={(e) => setCurrentPrice(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="quantity">Số lượng</Label>
-                  <Input id="quantity" type="number" placeholder="0" />
+                  <Input
+                    id="quantity"
+                    type="number"
+                    placeholder="0"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="purchaseDate">Ngày mua</Label>
-                  <Input id="purchaseDate" type="date" />
+                  <Input
+                    id="purchaseDate"
+                    type="date"
+                    value={purchaseDate}
+                    onChange={(e) => setPurchaseDate(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="invDescription">Mô tả</Label>
-                  <Textarea id="invDescription" placeholder="Ghi chú về khoản đầu tư" />
+                  <Textarea
+                    id="invDescription"
+                    placeholder="Ghi chú về khoản đầu tư"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
                 </div>
               </div>
               <div className="flex justify-end gap-3">
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button variant="outline" onClick={() => handleOpenChange(false)}>
                   Hủy
                 </Button>
-                <Button className="bg-emerald-600 hover:bg-emerald-700">Lưu</Button>
+                <Button onClick={handleSaveInvestment} className="bg-emerald-600 hover:bg-emerald-700">
+                  {editingId ? 'Cập nhật' : 'Lưu'}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -166,9 +293,8 @@ export default function Investments() {
                   <TrendingDown className="w-5 h-5 text-red-600" />
                 )}
                 <p
-                  className={`text-3xl font-bold ${
-                    totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'
-                  }`}
+                  className={`text-3xl font-bold ${totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'
+                    }`}
                 >
                   {formatCurrency(Math.abs(totalProfit))}
                 </p>
@@ -183,9 +309,8 @@ export default function Investments() {
             </CardHeader>
             <CardContent>
               <p
-                className={`text-3xl font-bold ${
-                  totalProfitPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'
-                }`}
+                className={`text-3xl font-bold ${totalProfitPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'
+                  }`}
               >
                 {totalProfitPercentage >= 0 ? '+' : ''}
                 {totalProfitPercentage.toFixed(2)}%
@@ -238,9 +363,8 @@ export default function Investments() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div
-                          className={`font-semibold ${
-                            profit >= 0 ? 'text-emerald-600' : 'text-red-600'
-                          }`}
+                          className={`font-semibold ${profit >= 0 ? 'text-emerald-600' : 'text-red-600'
+                            }`}
                         >
                           {profit >= 0 ? '+' : ''}
                           {formatCurrency(profit)}
@@ -252,13 +376,18 @@ export default function Investments() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEditClick(investment)}
+                          >
                             <Pencil className="w-4 h-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
                             className="text-red-600 hover:text-red-700"
+                            onClick={() => handleDeleteInvestment(investment.id!, investment.name)}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
