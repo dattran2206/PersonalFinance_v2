@@ -22,13 +22,17 @@ jobs:
           version: 8
 
       - name: Install dependencies 🔧
+        # Chuyển vào thư mục shadcn-ui trước khi cài đặt
+        working-directory: ./shadcn-ui
         run: pnpm install
 
       - name: Build 🏗️
+        working-directory: ./shadcn-ui
         run: pnpm run build
 
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist
+          # Thư mục build nằm trong shadcn-ui/dist
+          folder: shadcn-ui/dist
           branch: gh-pages
