@@ -1,74 +1,69 @@
-# Project Summary
-The project is a personal finance management application designed to help users track their financial activities, manage budgets, and generate reports. It features a user-friendly dashboard that provides insights into spending, income, and investments, making it easier for individuals to maintain their financial health. Recent updates have enhanced the mobile user experience with a bottom navigation feature and improved responsiveness for various devices.
+# Quản Lý Tài Chính Cá Nhân (Personal Finance App)
 
-# Project Module Description
-The application consists of several functional modules:
-1. **Dashboard** - Overview of financial status with charts and statistics.
-2. **Transaction Management** - Track daily, monthly, and yearly transactions.
-3. **Category Management** - Organize income and expense categories.
-4. **Account Management** - Manage bank accounts and digital wallets.
-5. **Budget Management** - Set and monitor budgets for different categories.
-6. **Savings Goal Management** - Track savings goals and progress.
-7. **Investment Tracking** - Monitor various investment assets.
-8. **Loan and Debt Management** - Keep track of loans and debts.
-9. **Reporting & Analytics** - Detailed reports and visual analytics.
-10. **Project & Recommendation** - Financial recommendations based on user data.
-11. **Responsive Layout** - Improved layout for mobile and desktop views.
+Ứng dụng quản lý tài chính cá nhân toàn diện, giúp bạn theo dõi thu chi, quản lý ngân sách, đầu tư và đạt được các mục tiêu tài chính một cách hiệu quả.
 
-# Directory Tree
+## 🚀 Tính Năng Chính
+
+Ứng dụng bao gồm các module chức năng chi tiết:
+
+1.  **Dashboard Tổng Quan**: Cái nhìn toàn cảnh về tình hình tài chính với biểu đồ trực quan.
+2.  **Quản Lý Thu Chi**: Theo dõi giao dịch hàng ngày, hàng tháng, bộ lọc chi tiết.
+3.  **Quản Lý Danh Mục**: Tùy chỉnh danh mục chi tiêu và thu nhập.
+4.  **Tài Khoản & Ví**: Quản lý nhiều tài khoản ngân hàng, ví điện tử, tiền mặt.
+5.  **Ngân Sách (Budget)**: Thiết lập và giám sát hạn mức chi tiêu cho từng danh mục.
+6.  **Quỹ Tiết Kiệm (Funds)**: Theo dõi tiến độ các mục tiêu tiết kiệm.
+7.  **Đầu Tư (Investments)**: Theo dõi danh mục đầu tư, tính toán lợi nhuận/lỗ.
+8.  **Nợ & Cho Vay (Debts)**: Quản lý các khoản nợ phải trả và khoản cho vay.
+9.  **Báo Cáo (Reports)**: Phân tích chi tiêu, thu nhập và tài sản ròng qua biểu đồ.
+10. **Dự Báo (Predictions)**: Dự đoán xu hướng tài chính và đưa ra lời khuyên.
+11. **Chuyển Tiền (Transfer)**: Chức năng chuyển tiền giữa các tài khoản nội bộ.
+
+## 🛠️ Công Nghệ Sử Dụng
+
+-   **Frontend Framework**: React (Vite)
+-   **Language**: TypeScript
+-   **UI Library**: Shadcn-UI
+-   **Styling**: Tailwind CSS
+-   **Charts**: Recharts
+-   **Icons**: Lucide React
+-   **PWA**: Vite PWA (Hỗ trợ cài đặt như ứng dụng native)
+
+## 📦 Cài Đặt và Chạy Dự Án
+
+### Yêu cầu
+-   Node.js (version 18+)
+-   pnpm (khuyên dùng) hoặc npm
+
+### Các bước cài đặt
+
+1.  **Cài đặt dependencies**:
+    ```bash
+    pnpm install
+    ```
+
+2.  **Chạy server development**:
+    ```bash
+    pnpm dev
+    ```
+    Truy cập `http://localhost:5173` (hoặc port hiển thị trên terminal).
+
+3.  **Build cho production**:
+    ```bash
+    pnpm build
+    ```
+    Thư mục đầu ra sẽ là `dist/`.
+
+## 📂 Cấu Trúc Thư Mục
+
 ```
-shadcn-ui/
-├── README.md               # Project overview and documentation
-├── components.json         # Component configuration
-├── eslint.config.js        # ESLint configuration file
-├── index.html              # Main HTML file
-├── package.json            # Project dependencies and scripts
-├── postcss.config.js       # PostCSS configuration
-├── public/                 # Public assets
-│   ├── favicon.svg         # Application favicon
-│   └── robots.txt          # Robots.txt for SEO
-├── src/                    # Source code
-│   ├── App.css             # Global styles
-│   ├── App.tsx             # Main application component
-│   ├── components/         # UI components
-│   ├── hooks/              # Custom hooks
-│   ├── lib/                # Utility functions and types
-│   ├── pages/              # Application pages
-│   ├── layout/             # Layout components (Header, Sidebar, BottomNav)
-│   └── main.tsx            # Application entry point
-├── tailwind.config.ts      # Tailwind CSS configuration
-├── tsconfig.*              # TypeScript configurations
-└── vite.config.ts          # Vite configuration
+src/
+├── components/         # Các thành phần UI tái sử dụng
+│   ├── dashboard/      # Cards, charts cho dashboard
+│   ├── layout/         # Header, Sidebar, BottomNav
+│   ├── ui/             # Shadcn UI components
+│   └── ...             # Các components theo tính năng
+├── pages/              # Các trang chính (Dashboard, Transactions, Budget...)
+├── services/           # Xử lý logic nghiệp vụ, API (nếu có)
+├── lib/                # Tiện ích, types, dummy data
+└── App.tsx             # Routing và cấu hình chính
 ```
-
-# File Description Inventory
-- **README.md**: Contains project documentation and setup instructions.
-- **components.json**: Configuration for UI components.
-- **eslint.config.js**: Configuration for code linting.
-- **index.html**: Entry point for the web application.
-- **package.json**: Lists dependencies and scripts for project management.
-- **postcss.config.js**: Configuration for PostCSS.
-- **src/**: Contains the source code for the application, including components, pages, hooks, and styles.
-- **layout/**: Contains layout components like Header, Sidebar, and BottomNav for responsive design.
-
-# Technology Stack
-- **React**: Front-end library for building user interfaces.
-- **TypeScript**: Typed superset of JavaScript for building robust applications.
-- **Shadcn-UI**: Component library for building UI components.
-- **Vite**: Build tool for modern web applications.
-- **Tailwind CSS**: Utility-first CSS framework for styling.
-- **Recharts**: Charting library for rendering graphs and data visualizations.
-
-# Usage
-1. Install dependencies:
-   ```
-   pnpm install
-   ```
-2. Build the application:
-   ```
-   pnpm run build
-   ```
-3. Run linting to check for code quality:
-   ```
-   pnpm run lint
-   ```
