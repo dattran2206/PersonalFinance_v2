@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input'; // Import MoneyInput
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,23 +41,23 @@ export default function Debts() {
 
   const [name, setName] = useState('');
   const [type, setType] = useState<DebtType>(DebtType.DEBT);
-  const [amount, setAmount] = useState('');
-  const [remainingAmount, setRemainingAmount] = useState('');
+  const [amount, setAmount] = useState<number>(0); // Changed to number
+  const [remainingAmount, setRemainingAmount] = useState<number>(0); // Changed to number
   const [interestRate, setInterestRate] = useState('');
   const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [monthlyPayment, setMonthlyPayment] = useState('');
+  const [monthlyPayment, setMonthlyPayment] = useState<number>(0); // Changed to number
   const [description, setDescription] = useState('');
 
   const resetForm = () => {
     setName('');
     setType(DebtType.DEBT);
-    setAmount('');
-    setRemainingAmount('');
+    setAmount(0);
+    setRemainingAmount(0);
     setInterestRate('');
     setStartDate('');
     setDueDate('');
-    setMonthlyPayment('');
+    setMonthlyPayment(0);
     setDescription('');
     setEditingId(null);
   };
@@ -69,19 +70,19 @@ export default function Debts() {
   const handleEditClick = (debt: any) => {
     setName(debt.name);
     setType(debt.type);
-    setAmount(debt.amount.toString());
-    setRemainingAmount(debt.remainingAmount.toString());
+    setAmount(debt.amount); // Already number
+    setRemainingAmount(debt.remainingAmount); // Already number
     setInterestRate(debt.interestRate.toString());
     setStartDate(debt.startDate);
     setDueDate(debt.dueDate);
-    setMonthlyPayment(debt.monthlyPayment ? debt.monthlyPayment.toString() : '');
+    setMonthlyPayment(debt.monthlyPayment || 0);
     setDescription(debt.description || '');
     setEditingId(debt.id);
     setIsOpen(true);
   };
 
   const handleSaveDebt = async () => {
-    if (!name || !amount || !remainingAmount || !startDate || !dueDate) {
+    if (!name || !amount || (remainingAmount !== 0 && !remainingAmount) || !startDate || !dueDate) {
       toast.error('Vui lòng điền đầy đủ thông tin!');
       return;
     }
@@ -91,12 +92,12 @@ export default function Debts() {
       const debtData = {
         name,
         type,
-        amount: Number(amount),
-        remainingAmount: Number(remainingAmount),
+        amount: amount, // Already number
+        remainingAmount: remainingAmount, // Already number
         interestRate: Number(interestRate || 0),
         startDate,
         dueDate,
-        monthlyPayment: monthlyPayment ? Number(monthlyPayment) : undefined,
+        monthlyPayment: monthlyPayment || undefined, // Already number
         description,
         updatedAt: now,
       };
@@ -201,23 +202,21 @@ export default function Debts() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="amount">Số tiền gốc</Label>
-                    <Input
+                    <MoneyInput
                       id="amount"
-                      type="number"
-                      placeholder="0"
                       value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
+                      onValueChange={setAmount}
+                      placeholder="0"
                     />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="remainingAmount">Còn lại</Label>
-                    <Input
+                    <MoneyInput
                       id="remainingAmount"
-                      type="number"
-                      placeholder="0"
                       value={remainingAmount}
-                      onChange={(e) => setRemainingAmount(e.target.value)}
+                      onValueChange={setRemainingAmount}
+                      placeholder="0"
                     />
                   </div>
                 </div>
@@ -258,12 +257,11 @@ export default function Debts() {
 
                 <div className="space-y-2">
                   <Label htmlFor="monthlyPayment">Trả hàng tháng (tùy chọn)</Label>
-                  <Input
+                  <MoneyInput
                     id="monthlyPayment"
-                    type="number"
-                    placeholder="0"
                     value={monthlyPayment}
-                    onChange={(e) => setMonthlyPayment(e.target.value)}
+                    onValueChange={setMonthlyPayment}
+                    placeholder="0"
                   />
                 </div>
 

@@ -26,6 +26,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { db } from '@/db/db';
+import { IconPicker } from '@/components/ui/icon-picker';
 
 export default function Categories() {
   const categories = useCategories() || [];
@@ -216,14 +217,13 @@ export default function Categories() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="icon">Icon (emoji)</Label>
-                  <Input
-                    id="icon"
-                    placeholder="🍔"
-                    maxLength={2}
-                    value={newCatIcon}
-                    onChange={(e) => setNewCatIcon(e.target.value)}
-                  />
+                  <Label>Biểu tượng</Label>
+                  <div>
+                    <IconPicker
+                      value={newCatIcon}
+                      onChange={setNewCatIcon}
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="color">Màu sắc</Label>

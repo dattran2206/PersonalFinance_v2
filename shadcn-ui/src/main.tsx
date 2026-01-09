@@ -15,11 +15,17 @@ import { seedDatabase } from './db/seed';
 import { ThemeProvider } from "@/components/theme-provider"
 
 // Initialize Database
+import { GoogleOAuthProvider } from '@react-oauth/google';
+
+// ...
+
 seedDatabase().then(() => {
     createRoot(document.getElementById('root')!).render(
-        <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
-            <App />
-        </ThemeProvider>
+        <GoogleOAuthProvider clientId="723496647102-ukjev9qdes909ik7gdpp4vrfg1sesdcf.apps.googleusercontent.com">
+            <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
+                <App />
+            </ThemeProvider>
+        </GoogleOAuthProvider>
     );
 });
 

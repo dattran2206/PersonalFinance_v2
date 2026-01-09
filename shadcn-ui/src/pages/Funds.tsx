@@ -19,8 +19,9 @@ import { formatCurrency } from '@/lib/calculations';
 import { Plus, Target, Calendar, TrendingUp, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/db/db';
+import { IconPicker } from '@/components/ui/icon-picker';
+import { MoneyInput } from '@/components/ui/money-input';
 
-const fundIcons = ['🚨', '✈️', '🏡', '👴', '🎓', '💍', '🚗', '📱', '🎯', '💰'];
 const fundColors = [
   '#EF4444',
   '#3B82F6',
@@ -38,8 +39,8 @@ export default function Funds() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [name, setName] = useState('');
-  const [targetAmount, setTargetAmount] = useState('');
-  const [currentAmount, setCurrentAmount] = useState('');
+  const [targetAmount, setTargetAmount] = useState<number>(0);
+  const [currentAmount, setCurrentAmount] = useState<number>(0);
   const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState('');
   const [icon, setIcon] = useState('🎯');
@@ -47,8 +48,8 @@ export default function Funds() {
 
   const resetForm = () => {
     setName('');
-    setTargetAmount('');
-    setCurrentAmount('');
+    setTargetAmount(0);
+    setCurrentAmount(0);
     setDescription('');
     setDeadline('');
     setIcon('🎯');
@@ -63,8 +64,8 @@ export default function Funds() {
 
   const handleEditClick = (fund: any) => {
     setName(fund.name);
-    setTargetAmount(fund.targetAmount.toString());
-    setCurrentAmount(fund.currentAmount.toString());
+    setTargetAmount(fund.targetAmount);
+    setCurrentAmount(fund.currentAmount);
     setDescription(fund.description || '');
     setDeadline(fund.deadline || '');
     setIcon(fund.icon);
@@ -85,8 +86,8 @@ export default function Funds() {
         // Update
         await db.funds.update(editingId, {
           name,
-          targetAmount: Number(targetAmount),
-          currentAmount: Number(currentAmount || 0),
+          targetAmount: targetAmount,
+          currentAmount: currentAmount || 0,
           description,
           deadline,
           icon,
@@ -99,8 +100,8 @@ export default function Funds() {
         await db.funds.add({
           id: self.crypto.randomUUID(),
           name,
-          targetAmount: Number(targetAmount),
-          currentAmount: Number(currentAmount || 0),
+          targetAmount: targetAmount,
+          currentAmount: currentAmount || 0,
           description,
           deadline,
           icon,
@@ -182,23 +183,21 @@ export default function Funds() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="targetAmount">Mục tiêu</Label>
-                    <Input
+                    <MoneyInput
                       id="targetAmount"
-                      type="number"
-                      placeholder="0"
                       value={targetAmount}
-                      onChange={(e) => setTargetAmount(e.target.value)}
+                      onValueChange={setTargetAmount}
+                      placeholder="0"
                     />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="currentAmount">Số tiền hiện tại</Label>
-                    <Input
+                    <MoneyInput
                       id="currentAmount"
-                      type="number"
-                      placeholder="0"
                       value={currentAmount}
-                      onChange={(e) => setCurrentAmount(e.target.value)}
+                      onValueChange={setCurrentAmount}
+                      placeholder="0"
                     />
                   </div>
                 </div>
@@ -224,20 +223,12 @@ export default function Funds() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Icon</Label>
-                  <div className="grid grid-cols-5 gap-2">
-                    {fundIcons.map((i) => (
-                      <button
-                        key={i}
-                        onClick={() => setIcon(i)}
-                        className={`text-2xl p-2 rounded-lg border-2 transition-colors ${icon === i
-                          ? 'border-emerald-600 bg-emerald-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                      >
-                        {i}
-                      </button>
-                    ))}
+                  <Label>Biểu tượng</Label>
+                  <div>
+                    <IconPicker
+                      value={icon}
+                      onChange={setIcon}
+                    />
                   </div>
                 </div>
 

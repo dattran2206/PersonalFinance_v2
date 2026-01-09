@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input'; // Import MoneyInput
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -35,7 +36,7 @@ export default function Budget() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [categoryId, setCategoryId] = useState('');
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState<number>(0); // Changed to number
   const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [startDate, setStartDate] = useState(() => {
     const now = new Date();
@@ -55,7 +56,7 @@ export default function Budget() {
       await db.budgets.add({
         id: self.crypto.randomUUID(),
         categoryId,
-        amount: Number(amount),
+        amount: amount, // Already number
         period,
         startDate,
         endDate,
@@ -68,7 +69,7 @@ export default function Budget() {
       toast.success('Thêm ngân sách thành công!');
       setIsOpen(false);
       setCategoryId('');
-      setAmount('');
+      setAmount(0);
       setPeriod('monthly');
       setEndDate('');
       setRollover(false);
@@ -165,12 +166,11 @@ export default function Budget() {
 
                 <div className="space-y-2">
                   <Label htmlFor="amount">Số tiền</Label>
-                  <Input
+                  <MoneyInput
                     id="amount"
-                    type="number"
-                    placeholder="0"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onValueChange={setAmount}
+                    placeholder="0"
                   />
                 </div>
 

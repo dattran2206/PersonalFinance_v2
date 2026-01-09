@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input'; // Import MoneyInput
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,8 +35,8 @@ export default function Transfer() {
 
   const [fromAccount, setFromAccount] = useState('');
   const [toAccount, setToAccount] = useState('');
-  const [amount, setAmount] = useState('');
-  const [fee, setFee] = useState('');
+  const [amount, setAmount] = useState<number>(0); // Changed to number
+  const [fee, setFee] = useState<number>(0); // Changed to number
   const [note, setNote] = useState('');
   const [date, setDate] = useState(() => {
     const today = new Date();
@@ -69,8 +70,8 @@ export default function Transfer() {
       return;
     }
 
-    const transferAmount = parseFloat(amount);
-    const transferFee = fee ? parseFloat(fee) : 0;
+    const transferAmount = amount; // Already number
+    const transferFee = fee || 0; // Already number
     const totalDeduction = transferAmount + transferFee;
 
     if (transferAmount <= 0) {
@@ -122,8 +123,8 @@ export default function Transfer() {
       toast.success('Chuyển tiền thành công!');
 
       // Reset form
-      setAmount('');
-      setFee('');
+      setAmount(0);
+      setFee(0);
       setNote('');
       // Keep accounts selected for convenience
     } catch (error) {
@@ -208,12 +209,11 @@ export default function Transfer() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="amount">Số tiền chuyển</Label>
-                  <Input
+                  <MoneyInput
                     id="amount"
-                    type="number"
-                    placeholder="0"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onValueChange={setAmount}
+                    placeholder="0"
                   />
                 </div>
                 <div className="space-y-2">
@@ -229,12 +229,11 @@ export default function Transfer() {
 
               <div className="space-y-2">
                 <Label htmlFor="fee">Phí giao dịch (Nếu có)</Label>
-                <Input
+                <MoneyInput
                   id="fee"
-                  type="number"
-                  placeholder="0"
                   value={fee}
-                  onChange={(e) => setFee(e.target.value)}
+                  onValueChange={setFee}
+                  placeholder="0"
                 />
                 <p className="text-xs text-gray-500">Phí sẽ được trừ vào tài khoản nguồn</p>
               </div>
@@ -262,15 +261,15 @@ export default function Transfer() {
                       {getAccountName(toAccount)}
                     </p>
                     <p>
-                      <strong>Số tiền:</strong> {formatCurrency(parseFloat(amount))}
+                      <strong>Số tiền:</strong> {formatCurrency(amount)}
                     </p>
-                    {fee && parseFloat(fee) > 0 && (
+                    {fee > 0 && (
                       <p>
-                        <strong>Phí:</strong> {formatCurrency(parseFloat(fee))}
+                        <strong>Phí:</strong> {formatCurrency(fee)}
                       </p>
                     )}
                     <p className="pt-2 font-bold">
-                      Tổng trừ ví nguồn: {formatCurrency(parseFloat(amount) + (parseFloat(fee) || 0))}
+                      Tổng trừ ví nguồn: {formatCurrency(amount + (fee || 0))}
                     </p>
                   </div>
                 </div>

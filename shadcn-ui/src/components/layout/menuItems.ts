@@ -10,6 +10,7 @@ import {
     BarChart3,
     Lightbulb,
     ArrowRightLeft,
+    Settings,
 } from 'lucide-react';
 
 export const menuItems = [
@@ -24,4 +25,5 @@ export const menuItems = [
     { icon: CreditCard, label: 'Nợ & Cho vay', path: '/debts' },
     { icon: BarChart3, label: 'Báo cáo', path: '/reports' },
     { icon: Lightbulb, label: 'Dự đoán', path: '/predictions' },
+    { icon: Settings, label: 'Cài đặt', path: '/settings' },
 ];

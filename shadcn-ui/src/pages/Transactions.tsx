@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input'; // Import MoneyInput
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -63,12 +64,12 @@ export default function Transactions() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   });
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState<number>(0); // Changed to number
   const [type, setType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [categoryId, setCategoryId] = useState('');
   const [accountId, setAccountId] = useState('');
   const [toAccountId, setToAccountId] = useState('');
-  const [fee, setFee] = useState('');
+  const [fee, setFee] = useState<number>(0); // Changed to number
   const [description, setDescription] = useState('');
   const [note, setNote] = useState('');
   const [recurrence, setRecurrence] = useState<RecurrenceType>(RecurrenceType.NONE);
@@ -109,7 +110,8 @@ export default function Transactions() {
     if (type === TransactionType.EXPENSE || type === TransactionType.TRANSFER) {
       const sourceAccount = accounts?.find(a => a.id === accountId);
       if (sourceAccount) {
-        const totalAmount = Number(amount) + (type === TransactionType.TRANSFER && fee ? Number(fee) : 0);
+        // amount and fee are already numbers
+        const totalAmount = amount + (type === TransactionType.TRANSFER && fee ? fee : 0);
         if (sourceAccount.balance < totalAmount) {
           toast.error('Số dư tài khoản không đủ để thực hiện giao dịch!');
           return;
@@ -121,13 +123,13 @@ export default function Transactions() {
       const now = Date.now();
       const transactionData = {
         description: description || '',
-        amount: Number(amount),
+        amount: amount, // already number
         date: date, // ISO Date string from input type="date"
         type: type,
         categoryId: categoryId || '',
         accountId: accountId,
         toAccountId: toAccountId,
-        fee: fee ? Number(fee) : undefined,
+        fee: fee ? fee : undefined, // already number
         note: note,
         recurrence: recurrence,
         createdAt: now,
@@ -142,12 +144,12 @@ export default function Transactions() {
       if (sourceAccount) {
         let newBalance = sourceAccount.balance;
         if (type === TransactionType.EXPENSE) {
-          newBalance -= Number(amount);
+          newBalance -= amount;
         } else if (type === TransactionType.INCOME) {
-          newBalance += Number(amount);
+          newBalance += amount;
         } else if (type === TransactionType.TRANSFER) {
-          newBalance -= Number(amount);
-          if (fee) newBalance -= Number(fee);
+          newBalance -= amount;
+          if (fee) newBalance -= fee;
         }
         await db.accounts.update(accountId, { balance: newBalance, updatedAt: now });
       }
@@ -155,18 +157,18 @@ export default function Transactions() {
       if (type === TransactionType.TRANSFER && toAccountId) {
         const destAccount = accounts.find((a) => a.id === toAccountId);
         if (destAccount) {
-          const newDestBalance = destAccount.balance + Number(amount);
+          const newDestBalance = destAccount.balance + amount;
           await db.accounts.update(toAccountId, { balance: newDestBalance, updatedAt: now });
         }
       }
 
       toast.success('Thêm giao dịch thành công!');
       setIsOpen(false);
-      setAmount('');
+      setAmount(0);
       setCategoryId('');
       setAccountId('');
       setToAccountId('');
-      setFee('');
+      setFee(0);
       setDescription('');
       setNote('');
       setRecurrence(RecurrenceType.NONE);
@@ -307,12 +309,11 @@ export default function Transactions() {
 
                 <div className="space-y-2">
                   <Label htmlFor="amount">Số tiền</Label>
-                  <Input
+                  <MoneyInput
                     id="amount"
-                    type="number"
-                    placeholder="0"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onValueChange={setAmount}
+                    placeholder="0"
                   />
                 </div>
 
@@ -383,12 +384,11 @@ export default function Transactions() {
 
                     <div className="space-y-2">
                       <Label htmlFor="fee">Phí giao dịch (tùy chọn)</Label>
-                      <Input
+                      <MoneyInput
                         id="fee"
-                        type="number"
-                        placeholder="0"
                         value={fee}
-                        onChange={(e) => setFee(e.target.value)}
+                        onValueChange={setFee}
+                        placeholder="0"
                       />
                     </div>
                   </>

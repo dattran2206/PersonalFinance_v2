@@ -40,6 +40,7 @@ import {
 import { Plus, TrendingUp, TrendingDown, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/db/db';
+import { MoneyInput } from '@/components/ui/money-input';
 
 export default function Investments() {
   const investments = useInvestments() || [];
@@ -48,18 +49,18 @@ export default function Investments() {
 
   const [name, setName] = useState('');
   const [type, setType] = useState<InvestmentType>(InvestmentType.STOCK);
-  const [purchasePrice, setPurchasePrice] = useState('');
-  const [currentPrice, setCurrentPrice] = useState('');
-  const [quantity, setQuantity] = useState('');
+  const [purchasePrice, setPurchasePrice] = useState<number>(0);
+  const [currentPrice, setCurrentPrice] = useState<number>(0);
+  const [quantity, setQuantity] = useState<number>(0);
   const [purchaseDate, setPurchaseDate] = useState('');
   const [description, setDescription] = useState('');
 
   const resetForm = () => {
     setName('');
     setType(InvestmentType.STOCK);
-    setPurchasePrice('');
-    setCurrentPrice('');
-    setQuantity('');
+    setPurchasePrice(0);
+    setCurrentPrice(0);
+    setQuantity(0);
     setPurchaseDate('');
     setDescription('');
     setEditingId(null);
@@ -74,9 +75,9 @@ export default function Investments() {
     setName(inv.name);
     // Cast string from DB back to Enum if needed, or just use string
     setType(inv.type as InvestmentType);
-    setPurchasePrice(inv.purchasePrice.toString());
-    setCurrentPrice(inv.currentPrice.toString());
-    setQuantity(inv.quantity.toString());
+    setPurchasePrice(inv.purchasePrice);
+    setCurrentPrice(inv.currentPrice);
+    setQuantity(inv.quantity);
     setPurchaseDate(inv.purchaseDate);
     setDescription(inv.description || '');
     setEditingId(inv.id);
@@ -94,9 +95,9 @@ export default function Investments() {
       const invData = {
         name,
         type,
-        purchasePrice: Number(purchasePrice),
-        currentPrice: Number(currentPrice || purchasePrice), // Default to purchase price if empty
-        quantity: Number(quantity),
+        purchasePrice: purchasePrice,
+        currentPrice: currentPrice || purchasePrice, // Default to purchase price if empty 
+        quantity: quantity,
         purchaseDate,
         description,
         updatedAt: now,
@@ -209,32 +210,29 @@ export default function Investments() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="purchasePrice">Giá mua</Label>
-                  <Input
+                  <MoneyInput
                     id="purchasePrice"
-                    type="number"
-                    placeholder="0"
                     value={purchasePrice}
-                    onChange={(e) => setPurchasePrice(e.target.value)}
+                    onValueChange={setPurchasePrice}
+                    placeholder="0"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="currentPrice">Giá hiện tại</Label>
-                  <Input
+                  <MoneyInput
                     id="currentPrice"
-                    type="number"
-                    placeholder="0"
                     value={currentPrice}
-                    onChange={(e) => setCurrentPrice(e.target.value)}
+                    onValueChange={setCurrentPrice}
+                    placeholder="0"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="quantity">Số lượng</Label>
-                  <Input
+                  <MoneyInput
                     id="quantity"
-                    type="number"
-                    placeholder="0"
                     value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
+                    onValueChange={setQuantity}
+                    placeholder="0"
                   />
                 </div>
                 <div className="space-y-2">

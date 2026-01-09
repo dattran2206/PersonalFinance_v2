@@ -117,6 +117,15 @@ html {
   background: #555;
 }
 
+/* No scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
 /* Responsive table wrapper */
 @media (max-width: 768px) {
   .table-responsive {

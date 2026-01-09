@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input'; // Import MoneyInput
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -52,10 +53,10 @@ export default function Accounts() {
   // Form State
   const [name, setName] = useState('');
   const [type, setType] = useState<AccountType>(AccountType.BANK);
-  const [balance, setBalance] = useState('');
+  const [balance, setBalance] = useState<number>(0); // Changed to number
   const [icon, setIcon] = useState('🏦');
   const [color, setColor] = useState('#10B981');
-  const [creditLimit, setCreditLimit] = useState('');
+  const [creditLimit, setCreditLimit] = useState<number>(0); // Changed to number
   const [dueDate, setDueDate] = useState('');
 
   if (!accounts) {
@@ -71,10 +72,10 @@ export default function Accounts() {
   const resetForm = () => {
     setName('');
     setType(AccountType.BANK);
-    setBalance('');
+    setBalance(0);
     setIcon('🏦');
     setColor('#10B981');
-    setCreditLimit('');
+    setCreditLimit(0);
     setDueDate('');
     setEditingId(null);
   };
@@ -87,22 +88,32 @@ export default function Accounts() {
   const handleEditClick = (account: any) => {
     setName(account.name);
     setType(account.type);
-    setBalance(account.balance.toString());
+    setBalance(account.balance); // Already number
     setIcon(account.icon || '🏦');
     setColor(account.color || '#10B981');
-    setCreditLimit(account.creditLimit?.toString() || '');
+    setCreditLimit(account.creditLimit || 0);
     setDueDate(account.dueDate || '');
     setEditingId(account.id);
     setIsOpen(true);
   };
 
   const handleSaveAccount = async () => {
-    if (!name || !balance) {
-      toast.error('Vui lòng điền đầy đủ thông tin!');
+    if (!name && name !== '') { // Allow name to be set (though initial check prevents empty)
+      toast.error('Vui lòng điền tên tài khoản!'); // Basic check
+      return;
+    }
+    // Note: balance can be 0, so simply checking !balance is wrong for 0.
+    // The previous check `if (!name || !balance)` prevented 0 balance which might be valid effectively
+    // But `MoneyInput` treats empty as 0 or undefined. Let's assume name is required.
+
+    if (!name) {
+      toast.error('Vui lòng điền tên tài khoản!');
       return;
     }
 
+
     if (type === AccountType.CREDIT_CARD && !creditLimit) {
+      // Allow 0 limit? Maybe not.
       toast.error('Vui lòng nhập hạn mức thẻ tín dụng!');
       return;
     }
@@ -114,11 +125,11 @@ export default function Accounts() {
         // Update existing account
         await db.accounts.update(editingId, {
           name,
-          balance: Number(balance),
+          balance: balance,
           type,
           icon,
           color,
-          creditLimit: creditLimit ? Number(creditLimit) : undefined,
+          creditLimit: creditLimit || undefined,
           dueDate,
           updatedAt: now
         });
@@ -128,11 +139,11 @@ export default function Accounts() {
         const accountData = {
           id: self.crypto.randomUUID(),
           name: name,
-          balance: Number(balance),
+          balance: balance,
           type: type,
           icon: icon,
           color: color,
-          creditLimit: creditLimit ? Number(creditLimit) : undefined,
+          creditLimit: creditLimit || undefined,
           dueDate: dueDate,
           createdAt: now,
           updatedAt: now,
@@ -226,12 +237,11 @@ export default function Accounts() {
 
                 <div className="space-y-2">
                   <Label htmlFor="balance">Số dư</Label>
-                  <Input
+                  <MoneyInput
                     id="balance"
-                    type="number"
-                    placeholder="0"
                     value={balance}
-                    onChange={(e) => setBalance(e.target.value)}
+                    onValueChange={setBalance}
+                    placeholder="0"
                   />
                   {editingId && (
                     <p className="text-xs text-amber-600 italic">
@@ -244,12 +254,11 @@ export default function Accounts() {
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="creditLimit">Hạn mức thẻ</Label>
-                      <Input
+                      <MoneyInput
                         id="creditLimit"
-                        type="number"
-                        placeholder="0"
                         value={creditLimit}
-                        onChange={(e) => setCreditLimit(e.target.value)}
+                        onValueChange={setCreditLimit}
+                        placeholder="0"
                       />
                     </div>
 

@@ -13,6 +13,7 @@ import Debts from './pages/Debts';
 import Reports from './pages/Reports';
 import Predictions from './pages/Predictions';
 import Transfer from './pages/Transfer';
+import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/reports" element={<Reports />} />
           <Route path="/predictions" element={<Predictions />} />
           <Route path="/transfer" element={<Transfer />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

@@ -19,10 +19,13 @@ import { useNotificationCheck } from '@/hooks/use-notification-check';
 import { db } from '@/db/db';
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { GoogleLoginBtn } from '@/components/auth/GoogleLoginBtn';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export default function Header() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, isAuthenticated, logout } = useAuthStore();
 
   // Initialize notification generator
   useNotificationCheck();
@@ -129,21 +132,38 @@ export default function Header() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="gap-2 px-2 md:px-3">
-                <Avatar className="w-8 h-8">
-                  <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=user" />
-                  <AvatarFallback>U</AvatarFallback>
-                </Avatar>
-                <span className="hidden md:inline font-medium">Người dùng</span>
+                {isAuthenticated && user ? (
+                  <>
+                    <Avatar className="w-8 h-8">
+                      <AvatarImage src={user.picture} />
+                      <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    <span className="hidden md:inline font-medium">{user.name}</span>
+                  </>
+                ) : (
+                  <div className="flex items-center">
+                    <GoogleLoginBtn />
+                  </div>
+                )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Tài khoản của tôi</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Hồ sơ</DropdownMenuItem>
-              <DropdownMenuItem>Cài đặt</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600">Đăng xuất</DropdownMenuItem>
-            </DropdownMenuContent>
+            {isAuthenticated && user && (
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col">
+                    <span>{user.name}</span>
+                    <span className="text-xs text-gray-500 font-normal">{user.email}</span>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Hồ sơ</DropdownMenuItem>
+                <DropdownMenuItem>Cài đặt</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-red-600" onClick={logout}>
+                  Đăng xuất
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            )}
           </DropdownMenu>
         </div>
       </div>
