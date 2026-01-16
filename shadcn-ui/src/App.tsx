@@ -20,7 +20,7 @@ const queryClient = new QueryClient();
 
 const App = () => {
   // Only use basename in production deployment on GitHub Pages
-  const basename = import.meta.env.MODE === 'production' ? '/PersonalFinance_v2' : '';
+  const basename = import.meta.env.DEV ? '' : '/PersonalFinance_v2';
 
   return (
     <QueryClientProvider client={queryClient}>

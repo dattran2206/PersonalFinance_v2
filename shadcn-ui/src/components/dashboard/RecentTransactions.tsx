@@ -4,6 +4,8 @@ import { Transaction, TransactionType, Category, Account } from '@/lib/types';
 import { formatCurrency } from '@/lib/calculations';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
+import { useNavigate } from 'react-router-dom';
+
 interface RecentTransactionsProps {
   transactions: Transaction[];
   categories: Category[];
@@ -15,6 +17,8 @@ export default function RecentTransactions({
   categories,
   accounts,
 }: RecentTransactionsProps) {
+  const navigate = useNavigate();
+
   const getCategoryName = (categoryId: string) => {
     return categories.find((c) => c.id === categoryId)?.name || 'Không xác định';
   };
@@ -24,7 +28,12 @@ export default function RecentTransactions({
       <CardHeader className="px-0 pt-0">
         <CardTitle className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center justify-between">
           <span>Giao dịch gần đây</span>
-          <span className="text-sm font-normal text-emerald-600 cursor-pointer hover:underline">Xem tất cả</span>
+          <span
+            className="text-sm font-normal text-emerald-600 cursor-pointer hover:underline"
+            onClick={() => navigate('/transactions')}
+          >
+            Xem tất cả
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="px-0">
@@ -37,8 +46,8 @@ export default function RecentTransactions({
               <div className="flex items-center gap-4">
                 <div
                   className={`p-3 rounded-xl transition-colors ${transaction.type === TransactionType.INCOME
-                      ? 'bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600'
-                      : 'bg-red-50 dark:bg-red-500/20 text-red-600'
+                    ? 'bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600'
+                    : 'bg-red-50 dark:bg-red-500/20 text-red-600'
                     }`}
                 >
                   {transaction.type === TransactionType.INCOME ? (
@@ -56,8 +65,8 @@ export default function RecentTransactions({
               </div>
               <div
                 className={`font-bold font-display ${transaction.type === TransactionType.INCOME
-                    ? 'text-emerald-600'
-                    : 'text-gray-900 dark:text-white'
+                  ? 'text-emerald-600'
+                  : 'text-gray-900 dark:text-white'
                   }`}
               >
                 {transaction.type === TransactionType.INCOME ? '+' : '-'}

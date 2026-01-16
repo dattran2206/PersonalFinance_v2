@@ -1,17 +1,26 @@
 import Dexie, { Table } from 'dexie';
 
+import {
+    TransactionType,
+    AccountType,
+    CategoryType,
+    InvestmentType,
+    DebtType,
+    RecurrenceType
+} from '../lib/types';
+
 export interface Transaction {
     id?: number;
     description: string;
     amount: number;
     date: string; // ISO string
-    type: 'income' | 'expense' | 'transfer';
+    type: TransactionType;
     categoryId: string;
     accountId: string;
     toAccountId?: string;
     fee?: number;
     note?: string;
-    recurrence?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+    recurrence?: RecurrenceType;
 
     // Sync fields
     createdAt: number;
@@ -23,7 +32,7 @@ export interface Account {
     id?: string; // Using string to match current mock data (or we can migrate to UUID)
     name: string;
     balance: number;
-    type: string;
+    type: AccountType;
     color?: string;
     icon?: string;
     creditLimit?: number;
@@ -38,7 +47,7 @@ export interface Account {
 export interface Category {
     id?: string;
     name: string;
-    type: 'income' | 'expense';
+    type: CategoryType;
     icon?: string;
     color?: string;
 
@@ -66,6 +75,7 @@ export interface Budget {
 export interface Fund {
     id?: string;
     name: string;
+    accountId: string;
     targetAmount: number;
     currentAmount: number;
     description?: string;
@@ -79,10 +89,26 @@ export interface Fund {
     isDeleted: boolean;
 }
 
+export interface FundHistory {
+    id?: number;
+    fundId: string;
+    date: string;              // ISO date
+    amount: number;
+    type: 'deposit' | 'withdraw';
+    note?: string;             // User note/description
+    sourceAccountId?: string;  // If depositing from different account
+    transactionId?: number;    // Link to auto-created transfer transaction
+
+    // Sync fields
+    createdAt: number;
+    updatedAt: number;
+    isDeleted: boolean;
+}
+
 export interface Debt {
     id?: string;
     name: string;
-    type: 'debt' | 'loan';
+    type: DebtType;
     amount: number;
     remainingAmount: number;
     interestRate: number;
@@ -100,12 +126,14 @@ export interface Debt {
 export interface Investment {
     id?: string;
     name: string;
-    type: 'stock' | 'bond' | 'fund' | 'crypto' | 'real_estate' | 'other';
+    type: InvestmentType;
     purchasePrice: number;
     currentPrice: number;
     quantity: number;
     purchaseDate: string;
     description?: string;
+    accountId?: string;
+    unit: string;
 
     // Sync fields
     createdAt: number;
@@ -135,6 +163,7 @@ export class FinanceDB extends Dexie {
     categories!: Table<Category, string>;
     budgets!: Table<Budget, string>;
     funds!: Table<Fund, string>;
+    fundHistory!: Table<FundHistory, number>;
     debts!: Table<Debt, string>;
     investments!: Table<Investment, string>;
     notifications!: Table<Notification, string>;
@@ -169,6 +198,22 @@ export class FinanceDB extends Dexie {
 
         this.version(6).stores({
             notifications: 'id, date, isRead, type'
+        });
+
+        this.version(7).stores({
+            transactions: '++id, date, type, categoryId, accountId, updatedAt'
+        });
+
+        this.version(8).stores({
+            funds: 'id, name, accountId, updatedAt'
+        });
+
+        this.version(9).stores({
+            fundHistory: '++id, fundId, date, type, updatedAt'
+        });
+
+        this.version(10).stores({
+            categories: 'id, name, type, updatedAt' // Added 'name' index
         });
     }
 }

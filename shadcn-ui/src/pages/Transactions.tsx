@@ -121,15 +121,16 @@ export default function Transactions() {
 
     try {
       const now = Date.now();
+
       const transactionData = {
         description: description || '',
-        amount: amount, // already number
-        date: date, // ISO Date string from input type="date"
+        amount: amount,
+        date: date,
         type: type,
         categoryId: categoryId || '',
         accountId: accountId,
         toAccountId: toAccountId,
-        fee: fee ? fee : undefined, // already number
+        fee: fee ? fee : undefined,
         note: note,
         recurrence: recurrence,
         createdAt: now,

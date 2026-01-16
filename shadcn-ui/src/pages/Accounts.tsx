@@ -19,9 +19,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { useAccounts } from '@/hooks/use-db';
+import { useAccounts, useFunds } from '@/hooks/use-db';
 import { AccountType } from '@/lib/types';
-import { formatCurrency } from '@/lib/calculations';
+import { formatCurrency, getAccountSummary } from '@/lib/calculations';
 import { Plus, Wallet, CreditCard, Calendar, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -47,6 +47,7 @@ const accountColors = [
 
 export default function Accounts() {
   const accounts = useAccounts();
+  const funds = useFunds() || [];
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -365,12 +366,45 @@ export default function Accounts() {
                 </div>
 
                 <h3 className="font-semibold text-lg mb-1">{account.name}</h3>
-                <p
-                  className={`text-2xl font-bold mb-4 ${account.balance >= 0 ? 'text-emerald-600' : 'text-red-600'
-                    }`}
-                >
-                  {formatCurrency(account.balance)}
-                </p>
+                <div className="mb-4">
+                  <p className={`text-2xl font-bold ${account.balance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {formatCurrency(account.balance)}
+                  </p>
+                  <p className="text-xs text-gray-500">Tổng số dư</p>
+
+                  {/* Account Breakdown */}
+                  {(() => {
+                    const summary = getAccountSummary(account as any, funds as any[]);
+                    if (summary.allocated > 0) {
+                      return (
+                        <div className="mt-2 space-y-1 text-sm border-t pt-2">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Khả dụng:</span>
+                            <span className="font-medium text-green-600">{formatCurrency(summary.available)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Quỹ:</span>
+                            <span className="font-medium text-amber-600">{formatCurrency(summary.allocated)}</span>
+                          </div>
+                          <details className="mt-1">
+                            <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600">
+                              Chi tiết quỹ ({summary.funds.length})
+                            </summary>
+                            <div className="pl-2 mt-1 space-y-1">
+                              {summary.funds.map(f => (
+                                <div key={f.id} className="flex justify-between text-xs text-gray-500">
+                                  <span>{f.name}</span>
+                                  <span>{formatCurrency(f.currentAmount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
 
                 {account.type === AccountType.CREDIT_CARD && account.creditLimit && (
                   <div className="space-y-2 pt-4 border-t">

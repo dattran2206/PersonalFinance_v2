@@ -3,7 +3,13 @@ import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
@@ -14,13 +20,18 @@ import {
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { useFunds } from '@/hooks/use-db';
-import { formatCurrency } from '@/lib/calculations';
-import { Plus, Target, Calendar, TrendingUp, Trash2, Pencil } from 'lucide-react';
+import { useFunds, useAccounts } from '@/hooks/use-db';
+import { formatCurrency, getAccountAllocatedAmount, getAccountAvailableAmount, validateFundAllocation } from '@/lib/calculations';
+import { Plus, Target, Calendar, TrendingUp, Trash2, Pencil, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/db/db';
 import { IconPicker } from '@/components/ui/icon-picker';
 import { MoneyInput } from '@/components/ui/money-input';
+import { createFundHistory } from '@/lib/fundHistoryHelpers';
+import { TransactionType } from '@/lib/types';
+import { Textarea } from '@/components/ui/textarea';
+import { FundHistoryList } from '@/components/fund/FundHistoryList';
+import { History } from 'lucide-react';
 
 const fundColors = [
   '#EF4444',
@@ -35,10 +46,12 @@ const fundColors = [
 
 export default function Funds() {
   const funds = useFunds() || [];
+  const accounts = useAccounts() || [];
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [name, setName] = useState('');
+  const [accountId, setAccountId] = useState('');
   const [targetAmount, setTargetAmount] = useState<number>(0);
   const [currentAmount, setCurrentAmount] = useState<number>(0);
   const [description, setDescription] = useState('');
@@ -46,8 +59,21 @@ export default function Funds() {
   const [icon, setIcon] = useState('🎯');
   const [color, setColor] = useState('#10B981');
 
+  // Deposit/Withdraw dialog
+  const [actionDialogOpen, setActionDialogOpen] = useState(false);
+  const [actionType, setActionType] = useState<'deposit' | 'withdraw'>('deposit');
+  const [actionFundId, setActionFundId] = useState<string>('');
+  const [actionAmount, setActionAmount] = useState<number>(0);
+  const [selectedSourceAccountId, setSelectedSourceAccountId] = useState<string>('');
+  const [actionNote, setActionNote] = useState<string>('');
+
+  // History dialog
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [historyFundId, setHistoryFundId] = useState<string>('');
+
   const resetForm = () => {
     setName('');
+    setAccountId('');
     setTargetAmount(0);
     setCurrentAmount(0);
     setDescription('');
@@ -64,6 +90,7 @@ export default function Funds() {
 
   const handleEditClick = (fund: any) => {
     setName(fund.name);
+    setAccountId(fund.accountId);
     setTargetAmount(fund.targetAmount);
     setCurrentAmount(fund.currentAmount);
     setDescription(fund.description || '');
@@ -77,6 +104,11 @@ export default function Funds() {
   const handleSaveFund = async () => {
     if (!name || !targetAmount) {
       toast.error('Vui lòng điền tên và mục tiêu!');
+      return;
+    }
+
+    if (!accountId && !editingId) {
+      toast.error('Vui lòng chọn tài khoản!');
       return;
     }
 
@@ -96,12 +128,13 @@ export default function Funds() {
         });
         toast.success('Cập nhật quỹ thành công!');
       } else {
-        // Create
+        // Create new fund
         await db.funds.add({
           id: self.crypto.randomUUID(),
           name,
+          accountId: accountId,
           targetAmount: targetAmount,
-          currentAmount: currentAmount || 0,
+          currentAmount: 0,
           description,
           deadline,
           icon,
@@ -131,7 +164,136 @@ export default function Funds() {
     }
   };
 
-  const totalSaved = funds.reduce((sum, fund) => sum + fund.currentAmount, 0);
+  const handleFundAction = async () => {
+    if (!actionFundId || actionAmount <= 0) {
+      toast.error('Vui lòng nhập số tiền hợp lệ!');
+      return;
+    }
+
+    // For deposits, source account is required
+    if (actionType === 'deposit' && !selectedSourceAccountId) {
+      toast.error('Vui lòng chọn tài khoản nguồn!');
+      return;
+    }
+
+    try {
+      const fund = funds.find(f => f.id === actionFundId);
+      const fundAccount = accounts.find(a => a.id === fund?.accountId);
+      const sourceAccount = actionType === 'deposit'
+        ? accounts.find(a => a.id === selectedSourceAccountId)
+        : null;
+
+      if (!fund || !fundAccount) {
+        toast.error('Không tìm thấy quỹ hoặc tài khoản!');
+        return;
+      }
+
+      const now = Date.now();
+      let transferTransactionId: number | undefined;
+
+      // CASE 1: Deposit from different account
+      if (actionType === 'deposit' && selectedSourceAccountId !== fund.accountId) {
+        if (!sourceAccount) {
+          toast.error('Tài khoản nguồn không hợp lệ!');
+          return;
+        }
+
+        // Validate source account has enough balance
+        if (sourceAccount.balance < actionAmount) {
+          toast.error('Số dư tài khoản nguồn không đủ!');
+          return;
+        }
+
+        // Create transfer transaction
+        transferTransactionId = await db.transactions.add({
+          description: `Chuyển tiền để nạp vào quỹ "${fund.name}"`,
+          amount: actionAmount,
+          date: new Date().toISOString().split('T')[0],
+          type: TransactionType.TRANSFER,
+          categoryId: '',
+          accountId: selectedSourceAccountId,
+          toAccountId: fund.accountId,
+          note: actionNote,
+          createdAt: now,
+          updatedAt: now,
+          isDeleted: false
+        });
+
+        // Update account balances
+        await db.accounts.update(selectedSourceAccountId, {
+          balance: sourceAccount.balance - actionAmount,
+          updatedAt: now
+        });
+
+        await db.accounts.update(fund.accountId, {
+          balance: fundAccount.balance + actionAmount,
+          updatedAt: now
+        });
+      }
+
+      // CASE 2: Deposit from same account - validate available balance
+      if (actionType === 'deposit' && selectedSourceAccountId === fund.accountId) {
+        const validation = validateFundAllocation(
+          fund.accountId,
+          fund.currentAmount + actionAmount,
+          fund.currentAmount,
+          fundAccount,
+          funds
+        );
+
+        if (!validation.valid) {
+          toast.error(validation.error || 'Số dư khả dụng không đủ!');
+          return;
+        }
+      }
+
+      // CASE 3: Withdraw - validate fund has enough
+      if (actionType === 'withdraw') {
+        if (fund.currentAmount < actionAmount) {
+          toast.error('Số dư quỹ không đủ!');
+          return;
+        }
+      }
+
+      // Update fund amount
+      const newAmount = actionType === 'deposit'
+        ? fund.currentAmount + actionAmount
+        : fund.currentAmount - actionAmount;
+
+      await db.funds.update(actionFundId, {
+        currentAmount: newAmount,
+        updatedAt: now
+      });
+
+      // Create fund history
+      await createFundHistory(
+        actionFundId,
+        actionAmount,
+        actionType,
+        actionNote || undefined,
+        actionType === 'deposit' ? selectedSourceAccountId : undefined,
+        transferTransactionId
+      );
+
+      toast.success(
+        actionType === 'deposit'
+          ? 'Nạp tiền vào quỹ thành công!'
+          : 'Rút tiền từ quỹ thành công!'
+      );
+
+      // Reset form
+      setActionDialogOpen(false);
+      setActionAmount(0);
+      setActionFundId('');
+      setSelectedSourceAccountId('');
+      setActionNote('');
+    } catch (error) {
+      console.error('Failed to update fund:', error);
+      toast.error('Có lỗi xảy ra!');
+    }
+  };
+
+  const totalSaved = funds.reduce((sum, fund) => sum + (fund.currentAmount || 0), 0);
   const totalTarget = funds.reduce((sum, fund) => sum + fund.targetAmount, 0);
   const overallProgress = totalTarget > 0 ? (totalSaved / totalTarget) * 100 : 0;
 
@@ -180,6 +342,30 @@ export default function Funds() {
                   />
                 </div>
 
+                {!editingId && (
+                  <div className="space-y-2">
+                    <Label htmlFor="account">Tài khoản</Label>
+                    <Select value={accountId} onValueChange={setAccountId}>
+                      <SelectTrigger id="account">
+                        <SelectValue placeholder="Chọn tài khoản" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {accounts.map(acc => (
+                          <SelectItem key={acc.id} value={acc.id}>
+                            <div className="flex items-center gap-2">
+                              <span>{acc.icon}</span>
+                              <span>{acc.name}</span>
+                              <span className="text-xs text-gray-500">
+                                ({formatCurrency(acc.balance)})
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="targetAmount">Mục tiêu</Label>
@@ -187,16 +373,6 @@ export default function Funds() {
                       id="targetAmount"
                       value={targetAmount}
                       onValueChange={setTargetAmount}
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="currentAmount">Số tiền hiện tại</Label>
-                    <MoneyInput
-                      id="currentAmount"
-                      value={currentAmount}
-                      onValueChange={setCurrentAmount}
                       placeholder="0"
                     />
                   </div>
@@ -297,14 +473,27 @@ export default function Funds() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {funds.map((fund) => {
-            const progress = (fund.currentAmount / fund.targetAmount) * 100;
-            const remaining = fund.targetAmount - fund.currentAmount;
+            const currentAmount = fund.currentAmount || 0;
+            const progress = (currentAmount / fund.targetAmount) * 100;
+            const remaining = fund.targetAmount - currentAmount;
             const daysRemaining = fund.deadline ? getDaysRemaining(fund.deadline) : null;
 
             return (
               <Card key={fund.id} className="hover:shadow-lg transition-shadow relative group">
                 <CardContent className="pt-6">
                   <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                      onClick={() => {
+                        setHistoryFundId(fund.id!);
+                        setHistoryDialogOpen(true);
+                      }}
+                      title="Lịch sử"
+                    >
+                      <History className="h-4 w-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -392,12 +581,142 @@ export default function Funds() {
                         </span>
                       </div>
                     )}
+
+                    <div className="flex gap-2 mt-4 pt-4 border-t">
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setActionFundId(fund.id!);
+                          setActionType('deposit');
+                          setActionAmount(0);
+                          setActionDialogOpen(true);
+                        }}
+                      >
+                        <ArrowDownCircle className="w-4 h-4 mr-2" />
+                        Nạp tiền
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          setActionFundId(fund.id!);
+                          setActionType('withdraw');
+                          setActionAmount(0);
+                          setActionDialogOpen(true);
+                        }}
+                      >
+                        <ArrowUpCircle className="w-4 h-4 mr-2" />
+                        Rút tiền
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             );
           })}
         </div>
+
+        <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {actionType === 'deposit' ? 'Nạp tiền vào quỹ' : 'Rút tiền từ quỹ'}
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4 mt-4">
+              {actionType === 'deposit' && (
+                <div className="space-y-2">
+                  <Label>Tài khoản nguồn</Label>
+                  <Select value={selectedSourceAccountId} onValueChange={setSelectedSourceAccountId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn tài khoản" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map(acc => {
+                        const allocated = getAccountAllocatedAmount(acc.id, funds);
+                        const available = acc.balance - allocated;
+
+                        return (
+                          <SelectItem key={acc.id} value={acc.id}>
+                            <div className="flex flex-col">
+                              <span>{acc.icon} {acc.name}</span>
+                              <span className="text-xs text-gray-500">
+                                Khả dụng: {formatCurrency(available)}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {selectedSourceAccountId && actionType === 'deposit' && (
+                <div className="bg-blue-50 p-3 rounded-md space-y-1">
+                  <div className="text-sm">
+                    <span className="text-gray-600">Số dư tài khoản: </span>
+                    <span className="font-semibold">
+                      {formatCurrency(accounts.find(a => a.id === selectedSourceAccountId)?.balance || 0)}
+                    </span>
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-gray-600">Đã phân bổ cho quỹ khác: </span>
+                    <span className="font-semibold text-amber-600">
+                      {formatCurrency(getAccountAllocatedAmount(selectedSourceAccountId, funds))}
+                    </span>
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-gray-600">Khả dụng để nạp: </span>
+                    <span className="font-semibold text-green-600">
+                      {formatCurrency(getAccountAvailableAmount(
+                        accounts.find(a => a.id === selectedSourceAccountId)!,
+                        funds
+                      ))}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Số tiền</Label>
+                <MoneyInput
+                  value={actionAmount}
+                  onValueChange={setActionAmount}
+                  placeholder="0"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Ghi chú (tùy chọn)</Label>
+                <Textarea
+                  value={actionNote}
+                  onChange={(e) => setActionNote(e.target.value)}
+                  placeholder="VD: Lương tháng 1, Tiền thưởng..."
+                  rows={2}
+                />
+              </div>
+
+              <Button onClick={handleFundAction} className="w-full">
+                {actionType === 'deposit' ? 'Nạp tiền' : 'Rút tiền'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+          <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Lịch sử giao dịch quỹ</DialogTitle>
+            </DialogHeader>
+            <div className="mt-4">
+              {historyFundId && <FundHistoryList fundId={historyFundId} />}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

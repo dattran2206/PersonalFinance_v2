@@ -29,8 +29,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { useInvestments } from '@/hooks/use-db';
-import { InvestmentType } from '@/lib/types';
+import { useInvestments, useAccounts } from '@/hooks/use-db';
+import { InvestmentType, TransactionType } from '@/lib/types';
 import {
   formatCurrency,
   calculateInvestmentValue,
@@ -42,8 +42,11 @@ import { toast } from 'sonner';
 import { db } from '@/db/db';
 import { MoneyInput } from '@/components/ui/money-input';
 
+import { PriceUpdaterDialog } from '@/components/investments/PriceUpdaterDialog';
+
 export default function Investments() {
   const investments = useInvestments() || [];
+  const accounts = useAccounts() || [];
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -52,8 +55,9 @@ export default function Investments() {
   const [purchasePrice, setPurchasePrice] = useState<number>(0);
   const [currentPrice, setCurrentPrice] = useState<number>(0);
   const [quantity, setQuantity] = useState<number>(0);
-  const [purchaseDate, setPurchaseDate] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
+  const [sourceAccountId, setSourceAccountId] = useState<string>('');
 
   const resetForm = () => {
     setName('');
@@ -61,8 +65,9 @@ export default function Investments() {
     setPurchasePrice(0);
     setCurrentPrice(0);
     setQuantity(0);
-    setPurchaseDate('');
+    setPurchaseDate(new Date().toISOString().split('T')[0]);
     setDescription('');
+    setSourceAccountId('');
     setEditingId(null);
   };
 
@@ -73,13 +78,13 @@ export default function Investments() {
 
   const handleEditClick = (inv: any) => {
     setName(inv.name);
-    // Cast string from DB back to Enum if needed, or just use string
     setType(inv.type as InvestmentType);
     setPurchasePrice(inv.purchasePrice);
     setCurrentPrice(inv.currentPrice);
     setQuantity(inv.quantity);
     setPurchaseDate(inv.purchaseDate);
     setDescription(inv.description || '');
+    setSourceAccountId(inv.accountId || '');
     setEditingId(inv.id);
     setIsDialogOpen(true);
   };
@@ -92,14 +97,17 @@ export default function Investments() {
 
     try {
       const now = Date.now();
+      const totalCost = purchasePrice * quantity;
+
       const invData = {
         name,
         type,
         purchasePrice: purchasePrice,
-        currentPrice: currentPrice || purchasePrice, // Default to purchase price if empty 
+        currentPrice: currentPrice || purchasePrice,
         quantity: quantity,
         purchaseDate,
         description,
+        accountId: sourceAccountId || undefined,
         updatedAt: now,
       };
 
@@ -107,13 +115,45 @@ export default function Investments() {
         await db.investments.update(editingId, invData);
         toast.success('Cập nhật khoản đầu tư thành công!');
       } else {
+        // --- BUY FLOW ---
+        let finalSourceAccount = null;
+        if (sourceAccountId) {
+          finalSourceAccount = accounts.find(a => a.id === sourceAccountId);
+          if (finalSourceAccount && finalSourceAccount.balance < totalCost) {
+            toast.error('Số dư tài khoản không đủ để thực hiện đầu tư!');
+            return;
+          }
+        }
+
         await db.investments.add({
           id: self.crypto.randomUUID(),
           ...invData,
           createdAt: now,
           isDeleted: false,
         });
-        toast.success('Thêm khoản đầu tư thành công!');
+
+        if (finalSourceAccount && sourceAccountId) {
+          await db.accounts.update(sourceAccountId, {
+            balance: finalSourceAccount.balance - totalCost,
+            updatedAt: now
+          });
+
+          await db.transactions.add({
+            description: `Đầu tư: ${name} (${quantity} x ${formatCurrency(purchasePrice)})`,
+            amount: totalCost,
+            date: purchaseDate,
+            type: TransactionType.TRANSFER,
+            accountId: sourceAccountId,
+            toAccountId: 'INVESTMENT',
+            note: description,
+            categoryId: 'INVESTMENT',
+            createdAt: now,
+            updatedAt: now,
+            isDeleted: false
+          });
+        }
+
+        toast.success('Thêm khoản đầu tư & trừ tiền thành công!');
       }
       setIsDialogOpen(false);
       resetForm();
@@ -136,18 +176,15 @@ export default function Investments() {
 
   const getInvestmentTypeLabel = (type: string) => {
     switch (type) {
-      case InvestmentType.STOCK:
-        return 'Cổ phiếu';
-      case InvestmentType.BOND:
-        return 'Trái phiếu';
-      case InvestmentType.FUND:
-        return 'Quỹ đầu tư';
-      case InvestmentType.CRYPTO:
-        return 'Tiền mã hóa';
-      case InvestmentType.REAL_ESTATE:
-        return 'Bất động sản';
-      default:
-        return 'Khác';
+      case InvestmentType.STOCK: return 'Cổ phiếu';
+      case InvestmentType.BOND: return 'Trái phiếu';
+      case InvestmentType.FUND: return 'Chứng chỉ quỹ';
+      case InvestmentType.CRYPTO: return 'Crypto';
+      case InvestmentType.REAL_ESTATE: return 'Bất động sản';
+      case InvestmentType.GOLD: return 'Vàng';
+      case InvestmentType.COMMODITY: return 'Hàng hóa';
+      case InvestmentType.SAVING: return 'Tiết kiệm';
+      default: return 'Khác';
     }
   };
 
@@ -171,99 +208,144 @@ export default function Investments() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Quản lý đầu tư</h1>
             <p className="text-gray-600">Theo dõi danh mục đầu tư của bạn</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={handleOpenChange}>
-            <DialogTrigger asChild>
-              <Button className="bg-emerald-600 hover:bg-emerald-700">
-                <Plus className="w-4 h-4 mr-2" />
-                Thêm khoản đầu tư
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{editingId ? 'Chỉnh sửa khoản đầu tư' : 'Thêm khoản đầu tư mới'}</DialogTitle>
-                <DialogDescription>Ghi nhận khoản đầu tư của bạn</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="invName">Tên khoản đầu tư</Label>
-                  <Input
-                    id="invName"
-                    placeholder="VNM - Vinamilk"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="invType">Loại đầu tư</Label>
-                  <Select value={type} onValueChange={(val) => setType(val as InvestmentType)}>
-                    <SelectTrigger id="invType">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="stock">Cổ phiếu</SelectItem>
-                      <SelectItem value="bond">Trái phiếu</SelectItem>
-                      <SelectItem value="fund">Quỹ đầu tư</SelectItem>
-                      <SelectItem value="crypto">Tiền mã hóa</SelectItem>
-                      <SelectItem value="real_estate">Bất động sản</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="purchasePrice">Giá mua</Label>
-                  <MoneyInput
-                    id="purchasePrice"
-                    value={purchasePrice}
-                    onValueChange={setPurchasePrice}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="currentPrice">Giá hiện tại</Label>
-                  <MoneyInput
-                    id="currentPrice"
-                    value={currentPrice}
-                    onValueChange={setCurrentPrice}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="quantity">Số lượng</Label>
-                  <MoneyInput
-                    id="quantity"
-                    value={quantity}
-                    onValueChange={setQuantity}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="purchaseDate">Ngày mua</Label>
-                  <Input
-                    id="purchaseDate"
-                    type="date"
-                    value={purchaseDate}
-                    onChange={(e) => setPurchaseDate(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="invDescription">Mô tả</Label>
-                  <Textarea
-                    id="invDescription"
-                    placeholder="Ghi chú về khoản đầu tư"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end gap-3">
-                <Button variant="outline" onClick={() => handleOpenChange(false)}>
-                  Hủy
+
+          <div className="flex gap-2">
+            <PriceUpdaterDialog investments={investments} />
+
+            <Dialog open={isDialogOpen} onOpenChange={handleOpenChange}>
+              <DialogTrigger asChild>
+                <Button className="bg-emerald-600 hover:bg-emerald-700">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Đầu tư mới
                 </Button>
-                <Button onClick={handleSaveInvestment} className="bg-emerald-600 hover:bg-emerald-700">
-                  {editingId ? 'Cập nhật' : 'Lưu'}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>{editingId ? 'Chỉnh sửa khoản đầu tư' : 'Mua tài sản đầu tư'}</DialogTitle>
+                  <DialogDescription>
+                    {editingId
+                      ? 'Cập nhật thông tin khoản đầu tư'
+                      : 'Ghi nhận giao dịch mua tài sản mới. Số tiền sẽ được trừ từ tài khoản nguồn.'}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto px-1">
+
+                  {!editingId && (
+                    <div className="space-y-2">
+                      <Label htmlFor="sourceAccount">Nguồn tiền (Tài khoản)</Label>
+                      <Select value={sourceAccountId} onValueChange={setSourceAccountId}>
+                        <SelectTrigger id="sourceAccount">
+                          <SelectValue placeholder="Chọn tài khoản thanh toán..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accounts.map(acc => (
+                            <SelectItem key={acc.id} value={acc.id!}>
+                              {acc.name} ({formatCurrency(acc.balance)})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="invName">Tên mã/Tài sản</Label>
+                      <Input
+                        id="invName"
+                        placeholder="VD: VCB, SJC..."
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="invType">Loại tài sản</Label>
+                      <Select value={type} onValueChange={(val) => setType(val as InvestmentType)}>
+                        <SelectTrigger id="invType">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="stock">Cổ phiếu</SelectItem>
+                          <SelectItem value="bond">Trái phiếu</SelectItem>
+                          <SelectItem value="fund">Chứng chỉ quỹ</SelectItem>
+                          <SelectItem value="crypto">Crypto (Coin)</SelectItem>
+                          <SelectItem value="gold">Vàng</SelectItem>
+                          <SelectItem value="real_estate">Bất động sản</SelectItem>
+                          <SelectItem value="saving">Sổ tiết kiệm</SelectItem>
+                          <SelectItem value="commodity">Hàng hóa khác</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="purchasePrice">Đơn giá mua</Label>
+                      <MoneyInput
+                        id="purchasePrice"
+                        value={purchasePrice}
+                        onValueChange={setPurchasePrice}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="quantity">Số lượng</Label>
+                      <MoneyInput
+                        id="quantity"
+                        value={quantity}
+                        onValueChange={setQuantity}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-3 rounded-lg border flex justify-between items-center">
+                    <span className="text-sm text-gray-600 font-medium">Tổng giá trị mua:</span>
+                    <span className="text-lg font-bold text-emerald-600">
+                      {formatCurrency(purchasePrice * quantity)}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="currentPrice">Giá thị trường hiện tại</Label>
+                    <MoneyInput
+                      id="currentPrice"
+                      value={currentPrice}
+                      onValueChange={setCurrentPrice}
+                      placeholder="Để 0 nếu giống giá mua"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="purchaseDate">Ngày mua</Label>
+                    <Input
+                      id="purchaseDate"
+                      type="date"
+                      value={purchaseDate}
+                      onChange={(e) => setPurchaseDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="invDescription">Ghi chú</Label>
+                    <Textarea
+                      id="invDescription"
+                      placeholder="Ghi chú thêm..."
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3">
+                  <Button variant="outline" onClick={() => handleOpenChange(false)}>
+                    Hủy
+                  </Button>
+                  <Button onClick={handleSaveInvestment} className="bg-emerald-600 hover:bg-emerald-700">
+                    {editingId ? 'Cập nhật' : 'Xác nhận Mua'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

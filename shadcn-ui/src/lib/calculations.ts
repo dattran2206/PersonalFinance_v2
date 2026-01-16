@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, Budget, Investment, Debt, MonthlyStats, CategorySpending, Category } from './types';
+import { Transaction, TransactionType, Budget, Investment, Debt, MonthlyStats, CategorySpending, Category, Account, Fund } from './types';
 
 export const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('vi-VN', {
@@ -11,15 +11,24 @@ export const formatNumber = (num: number): string => {
   return new Intl.NumberFormat('vi-VN').format(num);
 };
 
+// Debt/Loan related keywords to exclude from Income/Expense (Cashflow)
+const DEBT_KEYWORDS = ['Đi vay', 'Cho vay', 'Trả nợ', 'Thu nợ'];
+
 export const calculateTotalIncome = (transactions: Transaction[]): number => {
   return transactions
-    .filter(t => t.type === TransactionType.INCOME)
+    .filter((t) =>
+      t.type === TransactionType.INCOME &&
+      !DEBT_KEYWORDS.some(k => t.description?.includes(k) || (t.categoryId === 'uncategorized' && t.description?.includes(k)))
+    )
     .reduce((sum, t) => sum + t.amount, 0);
 };
 
 export const calculateTotalExpense = (transactions: Transaction[]): number => {
   return transactions
-    .filter(t => t.type === TransactionType.EXPENSE)
+    .filter((t) =>
+      t.type === TransactionType.EXPENSE &&
+      !DEBT_KEYWORDS.some(k => t.description?.includes(k) || (t.categoryId === 'uncategorized' && t.description?.includes(k)))
+    )
     .reduce((sum, t) => sum + t.amount, 0);
 };
 
@@ -177,4 +186,153 @@ export const generateFinancialAdvice = (
   }
 
   return advice;
+};
+
+// Account-based fund allocation calculations
+export const getAccountAllocatedAmount = (
+  accountId: string,
+  funds: any[]
+): number => {
+  return funds
+    .filter(f => f.accountId === accountId && !f.isDeleted)
+    .reduce((sum, f) => sum + (f.currentAmount || 0), 0);
+};
+
+export const getAccountAvailableAmount = (
+  account: any,
+  funds: any[]
+): number => {
+  const allocated = getAccountAllocatedAmount(account.id, funds);
+  return account.balance - allocated;
+};
+
+export const validateFundAllocation = (
+  accountId: string,
+  amount: number,
+  currentFundAmount: number,
+  account: any,
+  funds: any[]
+): { valid: boolean; error?: string } => {
+  if (amount < 0) {
+    return { valid: false, error: 'Số tiền phải lớn hơn hoặc bằng 0' };
+  }
+
+  const allocated = getAccountAllocatedAmount(accountId, funds);
+  const available = account.balance - allocated + currentFundAmount;
+
+  if (amount > available) {
+    return {
+      valid: false,
+      error: `Số dư khả dụng không đủ. Khả dụng: ${formatCurrency(available)}`
+    };
+  }
+
+  return { valid: true };
+};
+
+/**
+ * Get account summary with breakdown (total, allocated, available)
+ */
+export const getAccountSummary = (
+  account: Account,
+  funds: Fund[]
+) => {
+  const allocated = getAccountAllocatedAmount(account.id, funds);
+  const available = account.balance - allocated;
+
+  return {
+    total: account.balance,
+    allocated: allocated,
+    available: available,
+    funds: funds.filter(f => f.accountId === account.id && !f.isDeleted)
+  };
+};
+
+/**
+ * Get total assets summary across all accounts
+ */
+export const getTotalAssetsSummary = (
+  accounts: Account[],
+  funds: Fund[]
+) => {
+  const total = accounts.reduce((sum, acc) => sum + acc.balance, 0);
+  const allocated = funds
+    .filter(f => !f.isDeleted)
+    .reduce((sum, f) => sum + f.currentAmount, 0);
+  const available = total - allocated;
+
+  return {
+    total,
+    allocated,
+    available
+  };
+};
+
+// ----------------------------------------
+// FORECASTING & STATISTICAL HELPERS
+// ----------------------------------------
+
+/**
+ * Calculates Simple Linear Regression to predict the next value
+ * Returns the predicted y-value for the next x-step
+ */
+export const calculateLinearRegression = (data: number[]): number => {
+  const n = data.length;
+  if (n < 2) return data[n - 1] || 0;
+
+  let sumX = 0;
+  let sumY = 0;
+  let sumXY = 0;
+  let sumXX = 0;
+
+  for (let i = 0; i < n; i++) {
+    const x = i;
+    const y = data[i];
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumXX += x * x;
+  }
+
+  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+
+  // Predict next value (x = n)
+  return slope * n + intercept;
+};
+
+/**
+ * Estimates Minimum Monthly Expenses (Essentials)
+ * Based on specific keywords found in transaction categories/descriptions
+ */
+export const estimateMinimumMonthlyExpenses = (transactions: Transaction[], monthsData: number = 3): number => {
+  // Keywords indicating Essential spending
+  const ESSENTIAL_KEYWORDS = [
+    'ăn', 'uống', 'thực phẩm', 'đi chợ', 'siêu thị', // Food
+    'nhà', 'điện', 'nước', 'internet', 'wifi', 'gas', // Housing/Utilities
+    'xăng', 'xe', 'gửi xe', 'đi lại', // Transport
+    'thuốc', 'khám', 'bệnh', 'y tế', // Health
+    'học', 'phí' // Education
+  ];
+
+  // Filter for Essential Expenses in the last X months
+  const now = new Date();
+  const cutoffDate = new Date(now.getFullYear(), now.getMonth() - monthsData, 1);
+
+  const essentialTransactions = transactions.filter(t => {
+    if (t.type !== TransactionType.EXPENSE || t.isDeleted) return false;
+    const tDate = new Date(t.date);
+    if (tDate < cutoffDate) return false;
+
+    // Check description or note for keywords
+    // Ideally we should check Category Name, but we might only have ID here.
+    // For now, rely on robust description matching + 'uncategorized' fallback
+    const text = (t.description + ' ' + (t.note || '')).toLowerCase();
+    return ESSENTIAL_KEYWORDS.some(k => text.includes(k));
+  });
+
+  const totalEssential = essentialTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+  // Return average per month
+  return monthsData > 0 ? totalEssential / monthsData : 0;
 };

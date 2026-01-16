@@ -22,6 +22,10 @@ export enum InvestmentType {
   FUND = 'fund',
   CRYPTO = 'crypto',
   REAL_ESTATE = 'real_estate',
+  GOLD = 'gold',
+  COMMODITY = 'commodity',
+  SAVING = 'saving',
+  OTHER = 'other',
 }
 
 export enum DebtType {
@@ -37,10 +41,15 @@ export enum RecurrenceType {
   YEARLY = 'yearly',
 }
 
+export enum FundAction {
+  DEPOSIT = 'deposit',
+  WITHDRAW = 'withdraw',
+}
+
 export interface BaseEntity {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
+  id?: string | number;
+  createdAt: string | number;
+  updatedAt: string | number;
 }
 
 export interface Category extends BaseEntity {
@@ -73,6 +82,7 @@ export interface Transaction extends BaseEntity {
   description?: string;
   note?: string;
   recurrence?: RecurrenceType;
+  isDeleted?: boolean;
 }
 
 export interface Budget extends BaseEntity {
@@ -86,12 +96,24 @@ export interface Budget extends BaseEntity {
 
 export interface Fund extends BaseEntity {
   name: string;
+  accountId: string;
   targetAmount: number;
   currentAmount: number;
   description?: string;
   icon: string;
   color: string;
   deadline?: string | null;
+  isDeleted?: boolean;
+}
+
+export interface FundHistory extends BaseEntity {
+  fundId: string;
+  date: string;
+  amount: number;
+  type: 'deposit' | 'withdraw';
+  note?: string;
+  sourceAccountId?: string;
+  transactionId?: number;
 }
 
 export interface Investment extends BaseEntity {
@@ -104,6 +126,8 @@ export interface Investment extends BaseEntity {
   sellDate?: string;
   profit?: number;
   description?: string;
+  accountId?: string; // Source/Holding Account
+  unit: string;
 }
 
 export interface Debt extends BaseEntity {
